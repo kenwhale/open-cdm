@@ -2758,6 +2758,12 @@ export default {
         }
 
         Object.keys(this.originRightTree).forEach(async (key) => {
+          // 兼容 key 大小写: originRightTree 用 Instance/Schema/Catalog/Table,
+          // ELEMENT_TYPE_REF_MAP 用 Instance/CATALOG/SCHEMA/TABLE, 需归一化后取 ref
+          const refName = ELEMENT_TYPE_REF_MAP[key] || ELEMENT_TYPE_REF_MAP[(key || '').toUpperCase()];
+          if (!refName || !this.$refs[refName]) {
+            return;
+          }
           const res = await this.$services.rdpAuthFetchAuthTreeDef({
             data: {
               kind: this.activeAuthTab,
@@ -2765,7 +2771,7 @@ export default {
             }
           });
           this.originRightTree[key] = res.data;
-          this.$refs[ELEMENT_TYPE_REF_MAP[key]].setData(res.data);
+          this.$refs[refName].setData(res.data);
         });
 
         this.curRightTreeTab = 'Instance';
