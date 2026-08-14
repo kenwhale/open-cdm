@@ -2072,9 +2072,14 @@ export default {
         .filter(Boolean);
     },
     filterTreeWithCheckedNodes(tree) {
+      // 容错: getTreeData() 可能返回 undefined, 节点 children 可能非数组, 避免预览时 TypeError
+      if (!Array.isArray(tree)) {
+        return [];
+      }
       return tree
         .map((node) => {
-          const filteredChildren = this.filterTreeWithCheckedNodes(node.children || []);
+          const children = Array.isArray(node.children) ? node.children : [];
+          const filteredChildren = this.filterTreeWithCheckedNodes(children);
           if (node.checked || filteredChildren.length > 0) {
             return { ...node, children: filteredChildren };
           }
