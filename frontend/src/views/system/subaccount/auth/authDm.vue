@@ -834,9 +834,14 @@ export default {
       this.isSingleSelect = true;
 
       if (this.batchMode) {
-        this.originLeftTree = this.$refs.dataSourceTree.getTreeData();
-        const filterTree = this.cleanPreviewLeftTreePlaceholders(this.filterTreeWithCheckedNodes(this.originLeftTree));
-        this.$refs.dataSourceTree.setData(filterTree);
+        try {
+          this.originLeftTree = this.$refs.dataSourceTree.getTreeData();
+          const filterTree = this.cleanPreviewLeftTreePlaceholders(this.filterTreeWithCheckedNodes(this.originLeftTree));
+          this.$refs.dataSourceTree.setData(filterTree);
+        } catch (err) {
+          console.error('[authDm] handlePreviewForDm(batch) error:', err); // 调试: 暴露被吞的异常堆栈
+          this.$Message.error(this.$t('chu-xian-yi-chang-qing-shua-xin-ye-mian-hou-zhong-shi'));
+        }
         return;
       }
 
@@ -1739,7 +1744,7 @@ export default {
         this.leftTreeLoading = false;
       } catch (err) {
         this.leftTreeLoading = false;
-
+        console.error('[authDm] leftTreeNodeClick error:', err); // 调试: 暴露被吞的异常堆栈
         const idx = this.expandedKeys.indexOf(node?.key);
         if (idx !== -1) this.expandedKeys.splice(idx, 1);
         this.$Message.error(this.$t('chu-xian-yi-chang-qing-shua-xin-ye-mian-hou-zhong-shi'));
@@ -2332,6 +2337,7 @@ export default {
         }
         this.$refs.dataSourceTree?.scrollTo?.(node?.key, 'center');
       } catch (err) {
+        console.error('[authDm] handleGetAuthTreeForDm error:', err); // 调试: 暴露被吞的异常堆栈
         this.$Message.error(this.$t('chu-xian-yi-chang-qing-shua-xin-ye-mian-hou-zhong-shi'));
       } finally {
         if (requestId === this.authTreeRequestSeq) {
