@@ -46,6 +46,7 @@
               :unselect-on-click="false"
               @click="leftTreeNodeClick"
               @expand="handleDsExpand"
+              @checked-change="handleLeftTreeCheck"
             />
           </div>
           <div class="divider" @mousedown="startDragging" />
@@ -747,6 +748,25 @@ export default {
         this.upsertParentAuthTree(this.curNode?.key, currentAuthTree);
         this.syncDescendantInheritedAuth(this.curNode);
       }
+    },
+    // 批量模式: 左侧资源树勾选变化时, 把当前已选授权项应用到所有勾选节点
+    // (否则"先勾权限、后勾表"的新表不会被授权, handleAuthCheck 只在权限树勾选时触发)
+    handleLeftTreeCheck() {
+      if (!this.batchMode || this.isSingleSelect || !this.canCheckedChange) {
+        return;
+      }
+      const currentAuthTree = this.getCurrentAuthTreeData();
+      if (!Array.isArray(currentAuthTree) || !currentAuthTree.length) {
+        return;
+      }
+      const checkedAuthNodes = deepClone(this.getCheckedLeafAuthNodes(currentAuthTree));
+      if (!checkedAuthNodes.length) {
+        return;
+      }
+      const originalRightTreeData = this.curNode?.originalRightTreeData?.length ? this.curNode.originalRightTreeData : this.lastRightTreeData;
+      const comparableCheckedNodes = this.getComparableCheckedAuthNodes(checkedAuthNodes, originalRightTreeData);
+      const batchKeys = this.getCheckedResourceKeysOfType(this.curNode?.objType);
+      this.markLeftTreeEdited(this.curNode, this.curElementType, originalRightTreeData, comparableCheckedNodes, batchKeys);
     },
     // 批量模式: 收集所有已勾选的同类型资源节点 key(供授权项统一应用)
     // ⚠️ 勾选状态实时存在资源树组件内(v-tree 未回写 originLeftTree),
@@ -2399,9 +2419,15 @@ export default {
             let nodeMarked = markedWithActionRightTree;
             let isEdit = false;
             if (isBatch) {
-              // 批量: 每个节点用自身原授权与目标授权独立判定,
-              // 避免"已授权节点无变化→isEdit=false→批量其他未授权节点也被跳过"
-              const nodeOld = item.originalRightTreeData && item.originalRightTreeData.length ? item.originalRightTreeData : null;
+              // 批量: 每个节点用自身原授权(无则用当前权限树定义)与目标授权独立判定,
+              // 避免"已授权节点无变化→isEdit=false→批量其他未授权节点也被跳过",
+              // 且无原授权的表也基于完整权限树构建, 保证预览展示结构一致
+              const nodeOld =
+                item.originalRightTreeData && item.originalRightTreeData.length
+                  ? item.originalRightTreeData
+                  : Array.isArray(this.lastRightTreeData) && this.lastRightTreeData.length
+                    ? this.lastRightTreeData
+                    : null;
               if (nodeOld) {
                 [nodeMarked] = this.markRightTreeActions(deepClone(nodeOld), plainNewTree);
                 isEdit = this.getAuthLeafNodes(nodeMarked).some((auth) => auth.action);
