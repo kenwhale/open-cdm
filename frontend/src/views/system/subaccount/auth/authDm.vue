@@ -749,8 +749,23 @@ export default {
       }
     },
     // 批量模式: 收集所有已勾选的同类型资源节点 key(供授权项统一应用)
+    // ⚠️ 勾选状态实时存在资源树组件内(v-tree 未回写 originLeftTree),
+    //    必须从 $refs.dataSourceTree.getCheckedNodes() 实时取, 否则只能拿到当前节点
     getCheckedResourceKeysOfType(objType) {
       const keys = [];
+      try {
+        const checkedNodes = this.$refs.dataSourceTree?.getCheckedNodes?.() || [];
+        checkedNodes.forEach((n) => {
+          if (n && n.key && (!objType || n.objType === objType)) {
+            keys.push(n.key);
+          }
+        });
+        if (keys.length) {
+          return keys;
+        }
+      } catch (e) {
+        // 组件 API 不可用时退回 originLeftTree 兜底
+      }
       const walk = (nodes) => {
         (nodes || []).forEach((n) => {
           if (n.checked && n.key && (!objType || n.objType === objType)) {
