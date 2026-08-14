@@ -779,6 +779,20 @@ export default {
       walk(this.originLeftTree);
       return keys;
     },
+    // 授权树纯化: 递归剥离 v-tree 节点的内部指针(_parent 等), 消除循环引用
+    toPlainAuthTree(nodes) {
+      const walk = (list) =>
+        (Array.isArray(list) ? list : []).map((n) => {
+          const plain = { ...n, _parent: undefined, parent: undefined };
+          if (Array.isArray(n.children)) {
+            plain.children = walk(n.children);
+          } else {
+            delete plain.children;
+          }
+          return plain;
+        });
+      return walk(nodes);
+    },
     cancelAuth() {
       this.$router
         .push({
@@ -2375,6 +2389,10 @@ export default {
       // 批量模式: batchKeys 为所有勾选节点 key, 授权项统一应用到全部; 否则只应用到当前节点
       const targetKeys = batchKeys && batchKeys.length ? batchKeys : [node?.key];
       const isBatch = !!(batchKeys && batchKeys.length);
+      // newTree 来自 v-tree checked-change, 节点带 _parent 循环引用,
+      // 直接展开存储会让后续 JSON.stringify(如 handleAuthFromParent)抛
+      // "Converting circular structure to JSON", 先剥离树内部指针
+      const plainNewTree = isBatch ? this.toPlainAuthTree(newTree) : newTree;
       const updateNodeInTree = function (tree, keys) {
         return tree?.map?.((item) => {
           if (keys.includes(item?.key)) {
@@ -2385,11 +2403,11 @@ export default {
               // 避免"已授权节点无变化→isEdit=false→批量其他未授权节点也被跳过"
               const nodeOld = item.originalRightTreeData && item.originalRightTreeData.length ? item.originalRightTreeData : null;
               if (nodeOld) {
-                [nodeMarked] = this.markRightTreeActions(deepClone(nodeOld), newTree);
+                [nodeMarked] = this.markRightTreeActions(deepClone(nodeOld), plainNewTree);
                 isEdit = this.getAuthLeafNodes(nodeMarked).some((auth) => auth.action);
               } else {
                 // 节点无原授权记录 → 视为新增, 有勾选授权项即标记编辑
-                nodeMarked = (Array.isArray(newTree) ? newTree : []).map((t) => ({ ...t, checked: true, action: 'appends' }));
+                nodeMarked = (Array.isArray(plainNewTree) ? plainNewTree : []).map((t) => ({ ...t, checked: true, action: 'appends' }));
                 isEdit = nodeMarked.length > 0;
               }
             } else {
