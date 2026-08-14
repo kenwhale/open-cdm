@@ -2363,13 +2363,29 @@ export default {
 
       // 批量模式: batchKeys 为所有勾选节点 key, 授权项统一应用到全部; 否则只应用到当前节点
       const targetKeys = batchKeys && batchKeys.length ? batchKeys : [node?.key];
+      const isBatch = !!(batchKeys && batchKeys.length);
       const updateNodeInTree = function (tree, keys) {
         return tree?.map?.((item) => {
           if (keys.includes(item?.key)) {
+            let nodeMarked = markedWithActionRightTree;
             let isEdit = false;
-            // Rights change judgement
-            if (markedWithActionRightTree) {
-              isEdit = this.getAuthLeafNodes(markedWithActionRightTree).some((auth) => auth.action);
+            if (isBatch) {
+              // 批量: 每个节点用自身原授权与目标授权独立判定,
+              // 避免"已授权节点无变化→isEdit=false→批量其他未授权节点也被跳过"
+              const nodeOld = item.originalRightTreeData && item.originalRightTreeData.length ? item.originalRightTreeData : null;
+              if (nodeOld) {
+                [nodeMarked] = this.markRightTreeActions(deepClone(nodeOld), newTree);
+                isEdit = this.getAuthLeafNodes(nodeMarked).some((auth) => auth.action);
+              } else {
+                // 节点无原授权记录 → 视为新增, 有勾选授权项即标记编辑
+                nodeMarked = (Array.isArray(newTree) ? newTree : []).map((t) => ({ ...t, checked: true, action: 'appends' }));
+                isEdit = nodeMarked.length > 0;
+              }
+            } else {
+              // Rights change judgement (单节点, 保持原逻辑)
+              if (markedWithActionRightTree) {
+                isEdit = this.getAuthLeafNodes(markedWithActionRightTree).some((auth) => auth.action);
+              }
             }
             // Time change judgement
             const oldTime = item.authTime || {};
@@ -2382,8 +2398,10 @@ export default {
             if (oldStart !== newStart || oldEnd !== newEnd) {
               isEdit = true;
             }
-            item.markedWithActionRightTree = markedWithActionRightTree;
-            item.originalRightTreeData = deepClone(oldTree || []);
+            item.markedWithActionRightTree = nodeMarked;
+            item.originalRightTreeData = deepClone(
+              item.originalRightTreeData && item.originalRightTreeData.length ? item.originalRightTreeData : oldTree || []
+            );
             item.isEdit = isEdit;
             item.authTime = this.authTime;
           }
