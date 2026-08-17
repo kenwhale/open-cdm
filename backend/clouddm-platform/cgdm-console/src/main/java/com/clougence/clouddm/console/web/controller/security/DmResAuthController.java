@@ -47,9 +47,11 @@ import com.clougence.clouddm.console.web.service.browse.BrowseService;
 import com.clougence.clouddm.console.web.service.datasource.DmDsWebService;
 import com.clougence.clouddm.console.web.util.DmConvertUtils;
 import com.clougence.clouddm.platform.dal.access.ObjectCacheDao;
+import com.clougence.clouddm.platform.dal.model.auth.DmAuthResDO;
 import com.clougence.clouddm.platform.dal.model.datasource.DmDsDO;
 import com.clougence.clouddm.platform.dal.model.system.DmSysEnvDO;
 import com.clougence.clouddm.sdk.security.auth.AuthKind;
+import com.clougence.clouddm.sdk.security.auth.def.SecDataAuthLabel;
 import com.clougence.rdp.service.RdpDsEnvService;
 import com.clougence.schema.umi.struts.UmiTypes;
 import com.clougence.utils.CollectionUtils;
@@ -95,6 +97,13 @@ public class DmResAuthController {
         } else if (fo.getResPaths().size() == 1) {
             // ds list
             List<RdpAuthObjectVO> vos = this.authServiceForManage.listElements(puid, fo.getResPaths().get(0), fo.getAuthKind());
+            // 非主账号操作: 只保留操作者具备"数据源管理"权限的数据源
+            if (!puid.equals(uid)) {
+                List<Long> managedDsIds = this.dmDsAuthService.listAuthByUser(uid, AuthKind.DataSource).stream()
+                    .filter(a -> a.getAuthLabels() != null && a.getAuthLabels().contains(SecDataAuthLabel.RDP_DAUTH_DS_MANAGER) && a.isEffective())
+                    .map(DmAuthResDO::getResId).collect(Collectors.toList());
+                vos = vos.stream().filter(v -> managedDsIds.contains(v.getObjId())).collect(Collectors.toList());
+            }
             return ResWebDataUtils.buildSuccess(vos);
         } else {
             // ds object list

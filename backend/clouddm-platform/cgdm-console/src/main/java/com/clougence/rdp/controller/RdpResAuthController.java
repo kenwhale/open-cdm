@@ -149,7 +149,7 @@ public class RdpResAuthController {
 
         authServiceForBiz.checkOperateOtherUserAuth(uid, fo.getTargetUid());
 
-        authServiceForManage.modifyUserAuth(puid, fo);
+        authServiceForManage.modifyUserAuth(puid, uid, fo);
 
         opAuditService.logAndAddOperationAudit(puid, uid, request.getRequestURI(), request.getRemoteAddr(), fo
             .getTargetUid(), fo, SecurityLevel.HIGH, AuditType.MODIFY_SUB_ACCOUNT_AUTH, ResourceType.ACCOUNT);
@@ -165,7 +165,7 @@ public class RdpResAuthController {
         List<String> targetUids = new ArrayList<>(new LinkedHashSet<>(fo.getTargetUids()));
 
         targetUids.forEach(targetUid -> authServiceForBiz.checkOperateOtherUserAuth(uid, targetUid));
-        authServiceForManage.batchModifyUserAuth(puid, fo);
+        authServiceForManage.batchModifyUserAuth(puid, uid, fo);
 
         targetUids.forEach(targetUid -> opAuditService.logAndAddOperationAudit(puid, uid, request.getRequestURI(), request
             .getRemoteAddr(), targetUid, fo, SecurityLevel.HIGH, AuditType.MODIFY_SUB_ACCOUNT_AUTH, ResourceType.ACCOUNT));

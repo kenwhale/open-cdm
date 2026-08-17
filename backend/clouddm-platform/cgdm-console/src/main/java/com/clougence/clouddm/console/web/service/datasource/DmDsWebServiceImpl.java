@@ -476,7 +476,7 @@ public class DmDsWebServiceImpl implements DmDsWebService {
         authFO.setUpdates(Collections.emptyList());
         authFO.setDeletes(Collections.emptyList());
 
-        this.authServiceForManage.modifyUserAuth(this.userService.getPrimaryUid(uid), authFO);
+        this.authServiceForManage.modifyUserAuth(this.userService.getPrimaryUid(uid), this.userService.getPrimaryUid(uid), authFO);
     }
 
     private Map<String, String> resolveConfigMap(String uid, DsConfigSubmitFO fo) {

@@ -90,7 +90,7 @@ public class DmDataSourceNotify implements RdpNotifyService {
         authFO.setDeletes(Collections.emptyList());
 
         UserCacheEntry userCache = this.cacheDao.queryByUid(operatorUid);
-        this.authServiceForManage.modifyUserAuth(userCache.getParentUid(), authFO);
+        this.authServiceForManage.modifyUserAuth(userCache.getParentUid(), userCache.getParentUid(), authFO);
     }
 
     public void onDsDelete(long dsId) {

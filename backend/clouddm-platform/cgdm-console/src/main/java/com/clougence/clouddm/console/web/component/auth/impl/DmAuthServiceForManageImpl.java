@@ -51,6 +51,8 @@ import com.clougence.clouddm.sdk.security.auth.AuthElementType;
 import com.clougence.clouddm.sdk.security.auth.AuthInfo;
 import com.clougence.clouddm.sdk.security.auth.AuthInfoType;
 import com.clougence.clouddm.sdk.security.auth.AuthKind;
+import com.clougence.clouddm.sdk.security.auth.def.SecDataAuthLabel;
+import com.clougence.clouddm.api.common.exception.ErrorMessageException;
 import com.clougence.utils.CollectionUtils;
 import com.clougence.utils.ExceptionUtils;
 import com.clougence.utils.StringUtils;
@@ -249,13 +251,14 @@ public class DmAuthServiceForManageImpl implements DmAuthServiceForManage, Unifi
     }
 
     @Transactional(rollbackFor = Throwable.class, propagation = Propagation.REQUIRED)
-    public void modifyUserAuth(String puid, ModifyUserAuthFO modifyData) {
+    public void modifyUserAuth(String puid, String operatorUid, ModifyUserAuthFO modifyData) {
         //now only support DataSource
         if (modifyData.getAuthKind() != AuthKind.DataSource) {
             throw new IllegalArgumentException("Unsupported auth kind:" + modifyData.getAuthKind());
         }
 
         checkResOwner(puid, modifyData);
+        checkOperatorDsManage(puid, operatorUid, collectResIds(modifyData.getAppends(), modifyData.getUpdates(), modifyData.getDeletes()));
 
         Map<Long, String> resInstIdMap = new HashMap<>();
         Map<Long, String> resDescMap = new HashMap<>();
@@ -292,7 +295,7 @@ public class DmAuthServiceForManageImpl implements DmAuthServiceForManage, Unifi
     }
 
     @Transactional(rollbackFor = Throwable.class, propagation = Propagation.REQUIRED)
-    public void batchModifyUserAuth(String puid, BatchModifyUserAuthFO modifyData) {
+    public void batchModifyUserAuth(String puid, String operatorUid, BatchModifyUserAuthFO modifyData) {
         if (modifyData.getAuthKind() != AuthKind.DataSource) {
             throw new IllegalArgumentException("Unsupported auth kind:" + modifyData.getAuthKind());
         }
@@ -301,6 +304,7 @@ public class DmAuthServiceForManageImpl implements DmAuthServiceForManage, Unifi
         ownerCheckData.setAuthKind(modifyData.getAuthKind());
         ownerCheckData.setAppends(modifyData.getChanges());
         checkResOwner(puid, ownerCheckData);
+        checkOperatorDsManage(puid, operatorUid, modifyData.getChanges().stream().map(ModifyAuthForAppend::getResId).collect(Collectors.toList()));
 
         Map<Long, String> resInstIdMap = new HashMap<>();
         Map<Long, String> resDescMap = new HashMap<>();
@@ -348,6 +352,49 @@ public class DmAuthServiceForManageImpl implements DmAuthServiceForManage, Unifi
         if (!dsIds.containsAll(resIds)) {
             throw new IllegalArgumentException("Resource not belong the primary user.");
         }
+    }
+
+    /**
+     * 校验赋权操作者对涉及的每个数据源是否具备"数据源管理"权限。
+     * 主账号本人不受限; 其他操作者必须对该数据源有 RDP_DATA_DS_MANAGER 授权(且有效), 否则拒绝。
+     */
+    protected void checkOperatorDsManage(String puid, String operatorUid, List<Long> resIds) {
+        if (StringUtils.isBlank(operatorUid) || operatorUid.equals(puid)) {
+            return; // 主账号本人操作, 不受限
+        }
+        if (CollectionUtils.isEmpty(resIds)) {
+            return;
+        }
+        for (Long resId : resIds) {
+            DmDsDO dsDO = this.dsDal.dsMapper().queryDsIdentityById(resId);
+            if (dsDO != null && dsDO.getUid().equals(operatorUid)) {
+                continue; // 操作者即该数据源属主
+            }
+            List<DmAuthResDO> auths = this.authDal.resMapper().queryByPathLike(resId, operatorUid, AuthKind.DataSource, Collections.singletonList("/"));
+            boolean hasManage = auths.stream().anyMatch(a -> a.getAuthLabels() != null && a.getAuthLabels().contains(SecDataAuthLabel.RDP_DAUTH_DS_MANAGER) && a.isEffective());
+            if (!hasManage) {
+                throw new ErrorMessageException("无该数据源的管理权限, 不能对其赋权: " + resId);
+            }
+        }
+    }
+
+    /**
+     * 收集一次赋权操作涉及的全部数据源 resId(含 deletes 通过 authId 反查)。
+     */
+    protected List<Long> collectResIds(List<ModifyAuthForAppend> appends, List<ModifyAuthForUpdate> updates, List<ModifyAuthForDelete> deletes) {
+        Set<Long> resIds = new HashSet<>();
+        if (CollectionUtils.isNotEmpty(appends)) {
+            appends.forEach(a -> resIds.add(a.getResId()));
+        }
+        if (CollectionUtils.isNotEmpty(updates)) {
+            updates.forEach(u -> resIds.add(u.getResId()));
+        }
+        if (CollectionUtils.isNotEmpty(deletes)) {
+            List<Long> delAuthIds = deletes.stream().map(ModifyAuthForDelete::getAuthId).collect(Collectors.toList());
+            this.authDal.resMapper().selectBatchIds(delAuthIds).forEach(auth -> resIds.add(auth.getResId()));
+        }
+        resIds.remove(GLOBAL_RESOURCE_RES_ID);
+        return new ArrayList<>(resIds);
     }
 
     protected void fillExtraInfo(Map<Long, String> resInstIdMap, Map<Long, String> resDescMap, List<ModifyAuthForAppend> appends, List<ModifyAuthForUpdate> updates,

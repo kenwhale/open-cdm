@@ -68,9 +68,9 @@ public interface DmAuthServiceForManage {
 
     boolean hasGlobalAuth(String targetUid, AuthKind authKind, String dataAuthLabel);
 
-    void modifyUserAuth(String puid, ModifyUserAuthFO fo);
+    void modifyUserAuth(String puid, String operatorUid, ModifyUserAuthFO fo);
 
-    void batchModifyUserAuth(String puid, BatchModifyUserAuthFO fo);
+    void batchModifyUserAuth(String puid, String operatorUid, BatchModifyUserAuthFO fo);
 
     void appendUserAuth(String puid, RdpAddAuthTicketFO fo);
 
