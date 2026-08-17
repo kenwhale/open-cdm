@@ -1,8 +1,10 @@
 <script>
+import appLogger from '@/utils/logger';
 import { PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue';
 import dayjs from 'dayjs';
 import { TAB_TYPE } from '@/const';
 import browseMixin from '@/mixins/browseMixin';
+import IndexColumnsModal from './IndexColumnsModal';
 
 export default {
   name: 'CreateTableItem',
@@ -19,6 +21,7 @@ export default {
     selectedNode: Object
   },
   components: {
+    IndexColumnsModal,
     PlusOutlined,
     QuestionCircleOutlined
   },
@@ -30,6 +33,45 @@ export default {
       } else {
         return false;
       }
+    },
+    isIndexColumnsSelector() {
+      return this.nodeType === 'indexes' && this.schema.type === 'SelectColumns';
+    },
+    isInlineColumnsSelector() {
+      return (
+        this.nodeType === 'tableInfo' &&
+        this.schema.type === 'SelectColumns' &&
+        this.schema.children?.length === 1 &&
+        this.schema.children[0].type === 'Columns'
+      );
+    },
+    inlineColumnsField() {
+      return this.schema.children?.[0];
+    },
+    selectedInlineColumnNames: {
+      get() {
+        const field = this.inlineColumnsField?.field;
+        return (this.selectedData[this.schema.field] || []).map((column) => column[field]).filter(Boolean);
+      },
+      set(values) {
+        const field = this.inlineColumnsField.field;
+        const selectedColumns = this.selectedData[this.schema.field] || [];
+        const selectedColumnMap = new Map(selectedColumns.map((column) => [column[field], column]));
+        this.selectedData[this.schema.field] = values.map((value, index) => {
+          return (
+            selectedColumnMap.get(value) || {
+              key: `${dayjs().valueOf()}-${index}`,
+              [field]: value
+            }
+          );
+        });
+      }
+    },
+    selectedIndexColumnNames() {
+      return (this.selectedData[this.schema.field] || [])
+        .map((column) => column.name)
+        .filter(Boolean)
+        .join(', ');
     }
   },
   data() {
@@ -44,7 +86,8 @@ export default {
       selectedLeaf: null,
       schema: {},
       inputVisible: false,
-      inputValue: ''
+      inputValue: '',
+      indexColumnsModalVisible: false
     };
   },
   watch: {
@@ -178,6 +221,17 @@ export default {
       this.selectedColumnIndex = index;
       this.selectedColumn = column;
     },
+    handleOpenIndexColumnsModal() {
+      this.indexColumnsModalVisible = true;
+    },
+    handleCloseIndexColumnsModal() {
+      this.indexColumnsModalVisible = false;
+    },
+    handleSaveIndexColumns(columns) {
+      this.selectedData[this.schema.field] = columns;
+      this.handleCloseIndexColumnsModal();
+      this.$forceUpdate();
+    },
     handleAddColumn(schema) {
       const column = {
         key: dayjs().valueOf()
@@ -209,6 +263,18 @@ export default {
       this.selectedData[schema.field].splice(index, 1);
       this.selectedColumn = {};
       this.selectedColumnIndex = -1;
+      this.$forceUpdate();
+    },
+    handleMoveColumn(schema, offset) {
+      const columns = this.selectedData[schema.field] || [];
+      const targetIndex = this.selectedColumnIndex + offset;
+      if (this.selectedColumnIndex < 0 || targetIndex < 0 || targetIndex >= columns.length) {
+        return;
+      }
+      const [column] = columns.splice(this.selectedColumnIndex, 1);
+      columns.splice(targetIndex, 0, column);
+      this.selectedColumnIndex = targetIndex;
+      this.selectedColumn = column;
       this.$forceUpdate();
     },
     handleAddTree(schema) {
@@ -324,7 +390,7 @@ export default {
       this.selectedTemplateIndex = this.selectedColumn[schema.field].length - 1;
     },
     handleDeleteTemplate(parentSchema, schema) {
-      console.log(this.selectedData[parentSchema.field], parentSchema.field, schema.field, this.selectedColumnIndex, this.selectedTemplateIndex);
+      appLogger.debug(this.selectedData[parentSchema.field], parentSchema.field, schema.field, this.selectedColumnIndex, this.selectedTemplateIndex);
       this.selectedData[parentSchema.field][this.selectedColumnIndex][schema.field].splice(this.selectedTemplateIndex, 1);
       this.selectedTemplate = {};
       this.selectedTemplateIndex = -1;
@@ -334,7 +400,7 @@ export default {
       this.selectedTemplate = template;
     },
     async handleReferenceSchemaOpenChange(open) {
-      console.log(open);
+      appLogger.debug(open);
       if (open) {
         const res = await this.$services.dmBrowseListLevels({
           data: {
@@ -430,14 +496,14 @@ export default {
       this.inputVisible = false;
     },
     async generateOptionSchema(options, value, schema) {
-      console.log('generateOptionSchema', value);
+      appLogger.debug('generateOptionSchema', value);
       for (let i = 0; i < options.length; i++) {
         const option = options[i];
         if (option.value === value && option.children && option.children.length) {
           schema.children = option.children;
           for (let j = 0; j < option.children.length; j++) {
             const child = option.children[j];
-            console.log(child.type);
+            appLogger.debug(child.type);
 
             if (!(child.field in this.selectedData)) {
               this.selectedData[child.field] = child.defaultVal;
@@ -511,7 +577,11 @@ export default {
   <div style="display: flex; margin-top: 5px" v-if="!schema.hide">
     <div style="min-width: 100px; line-height: 24px" v-if="schema.type !== 'Fold'">{{ schema.titleI18N }}:</div>
     <div style="flex: 1">
-      <div style="display: flex; align-items: center; justify-content: space-between" v-if="schema.type !== 'Fold'">
+      <div
+        class="create-table-item__control"
+        style="display: flex; align-items: center; justify-content: space-between"
+        v-if="schema.type !== 'Fold'"
+      >
         <a-input
           v-if="schema.type === 'Input'"
           v-model:value="selectedData[schema.field]"
@@ -613,6 +683,29 @@ export default {
             size="small"
           />
         </div>
+        <button v-else-if="isIndexColumnsSelector" type="button" class="index-columns-trigger" @click="handleOpenIndexColumnsModal">
+          <span :class="{ 'index-columns-trigger__placeholder': !selectedIndexColumnNames }">
+            {{ selectedIndexColumnNames || $t('qing-xuan-ze-lie') }}
+          </span>
+          <span class="index-columns-trigger__action">{{ $t('bian-ji') }}</span>
+        </button>
+        <a-select
+          v-else-if="isInlineColumnsSelector"
+          v-model:value="selectedInlineColumnNames"
+          class="distribution-columns-select"
+          mode="multiple"
+          size="small"
+          style="width: 100%"
+          allow-clear
+          show-search
+          max-tag-count="responsive"
+          :placeholder="$t('qing-xuan-ze-lie')"
+          :disabled="isReadOnly(schema)"
+        >
+          <a-select-option v-for="tableColumn in formData.columns" :key="`${tab.tabId}-${tableColumn.key}`" :value="tableColumn.name">
+            {{ tableColumn.name }}
+          </a-select-option>
+        </a-select>
         <div
           v-else-if="
             schema.type === 'SelectColumns' || schema.type === 'ReferenceRelation' || schema.type === 'PartitionDefineList' || schema.type === 'Tree'
@@ -651,12 +744,30 @@ export default {
             </a-tree>
           </div>
           <div class="left" v-else style="width: 200px; border-right: 1px solid #ccc">
-            <div style="width: 100%; display: flex">
-              <a-button @click="handleAddColumn(schema)" size="small" style="flex: 1" :disabled="isReadOnly(schema)">
+            <div style="width: 100%; display: flex; flex-wrap: wrap">
+              <a-button @click="handleAddColumn(schema)" size="small" style="flex: 1 1 50%" :disabled="isReadOnly(schema)">
                 {{ $t('zeng-jia') }}
               </a-button>
-              <a-button @click="handleDeleteColumn(schema)" size="small" style="flex: 1" :disabled="isReadOnly(schema)">
+              <a-button @click="handleDeleteColumn(schema)" size="small" style="flex: 1 1 50%" :disabled="isReadOnly(schema)">
                 {{ $t('shan-chu') }}
+              </a-button>
+              <a-button
+                v-if="schema.type === 'SelectColumns'"
+                size="small"
+                style="flex: 1 1 50%"
+                :disabled="isReadOnly(schema) || selectedColumnIndex <= 0"
+                @click="handleMoveColumn(schema, -1)"
+              >
+                {{ $t('table-editor-move-up') }}
+              </a-button>
+              <a-button
+                v-if="schema.type === 'SelectColumns'"
+                size="small"
+                style="flex: 1 1 50%"
+                :disabled="isReadOnly(schema) || selectedColumnIndex < 0 || selectedColumnIndex >= (selectedData[schema.field] || []).length - 1"
+                @click="handleMoveColumn(schema, 1)"
+              >
+                {{ $t('table-editor-move-down') }}
               </a-button>
             </div>
             <div :style="`min-height: 80px;height: ${selectedData[schema.field] ? selectedData[schema.field].length * 20 : 0}px`">
@@ -856,6 +967,17 @@ export default {
           </template>
         </a-tooltip>
       </div>
+      <IndexColumnsModal
+        v-if="isIndexColumnsSelector"
+        :visible="indexColumnsModalVisible"
+        :schema="schema"
+        :value="selectedData[schema.field] || []"
+        :table-columns="formData.columns || []"
+        :tab-id="tab.tabId"
+        :read-only="isReadOnly(schema)"
+        @cancel="handleCloseIndexColumnsModal"
+        @confirm="handleSaveIndexColumns"
+      />
       <a-collapse v-if="schema.type === 'Fold'" size="small">
         <a-collapse-panel :header="schema.titleI18N">
           <CreateTableItem
@@ -885,6 +1007,7 @@ export default {
         <CreateTableItem
           v-for="childSchema in schema.children"
           :key="childSchema.field"
+          class="create-table-item--nested"
           style="flex: 1; margin-left: -100px"
           :current-schema="childSchema"
           :node-type="nodeType"
@@ -899,6 +1022,16 @@ export default {
 </template>
 
 <style scoped lang="less">
+.create-table-item__control {
+  min-height: 36px;
+}
+
+.create-table-item__control :deep(.ant-checkbox-wrapper),
+.create-table-item__control :deep(.ant-radio-wrapper) {
+  display: inline-flex;
+  align-items: center;
+}
+
 :deep(.ivu-select-small.ivu-select-single .ivu-select-selection) {
   border-radius: 0;
   border-color: #d9d9d9;
@@ -932,5 +1065,86 @@ export default {
     flex: 1;
     border-left: 1px solid #ccc;
   }
+}
+
+.index-columns-trigger {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.index-columns-trigger > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.index-columns-trigger__placeholder {
+  color: var(--text-tertiary);
+}
+
+.index-columns-trigger__action {
+  flex: 0 0 auto;
+  color: var(--primary-color);
+}
+
+.distribution-columns-select :deep(.ant-select-selection-overflow) {
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.distribution-columns-select :deep(.ant-select-selection-item) {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  margin: 0 !important;
+  padding: 0 5px 0 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 5px;
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+  line-height: 1;
+}
+
+.distribution-columns-select :deep(.ant-select-selection-item-content) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.distribution-columns-select :deep(.ant-select-selection-item-remove) {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 3px;
+  border-radius: 3px;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.distribution-columns-select :deep(.ant-select-selection-item-remove .anticon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.distribution-columns-select :deep(.ant-select-selection-item-remove:hover) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 </style>

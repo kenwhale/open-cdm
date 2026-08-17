@@ -195,8 +195,13 @@ public class MyHooks implements SessionHook {
         } else {
             stmt = conn.prepareStatement(query.getQueryBody(), ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
         }
-        stmt.setFetchSize(Integer.MIN_VALUE);
+
+        this.setFetchSize(stmt);
         return stmt;
+    }
+
+    protected void setFetchSize(PreparedStatement stmt) throws SQLException {
+        stmt.setFetchSize(Integer.MIN_VALUE);
     }
 
     @Override
@@ -204,7 +209,7 @@ public class MyHooks implements SessionHook {
         String queryBody = query.getQueryBody();
         int pos = queryBody.length() - StringUtils.trimBlankStart(queryBody).length();
         StringBuilder explainBody = new StringBuilder(queryBody);
-        explainBody.insert(pos, "explain ");
+        explainBody.insert(pos, "explain format=traditional ");
 
         PreparedStatement stmt = conn.prepareStatement(explainBody.toString(), java.sql.ResultSet.TYPE_FORWARD_ONLY, java.sql.ResultSet.CONCUR_READ_ONLY);
         stmt.setFetchSize(200);

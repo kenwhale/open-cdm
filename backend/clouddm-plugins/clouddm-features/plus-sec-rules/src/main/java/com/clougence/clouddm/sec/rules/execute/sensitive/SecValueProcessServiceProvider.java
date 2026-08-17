@@ -22,14 +22,13 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.clougence.clouddm.base.metadata.ds.ColMetaData;
-import com.clougence.clouddm.sdk.execute.ExecuteVariables;
 import com.clougence.clouddm.sdk.execute.session.QueryRequest;
+import com.clougence.clouddm.sdk.execute.session.result.ColumnConfig;
 import com.clougence.clouddm.sdk.execute.session.result.ValueProcessService;
-import com.clougence.clouddm.sdk.model.analysis.TargetType;
 import com.clougence.clouddm.sdk.service.cache.CacheService;
 import com.clougence.clouddm.sdk.service.config.ConfigService;
 import com.clougence.clouddm.sdk.service.secrules.*;
-import com.clougence.clouddm.sdk.sql.column.RealColumn;
+import com.clougence.clouddm.sdk.sql.analysis.lineage.SourceName;
 import com.clougence.clouddm.sec.rules.domain.special.rdb.RdbValueDomain;
 import com.clougence.schema.umi.struts.UmiTypes;
 import com.clougence.utils.CollectionUtils;
@@ -59,12 +58,12 @@ public class SecValueProcessServiceProvider implements ValueProcessService {
     @Override
     @SneakyThrows
     public void begin(QueryRequest query, Map<String, ColMetaData> rowMeta, Map<String, Object> flash) {
-        String dsId = query.getVariables().get(ExecuteVariables.DS_ID);
-        if (StringUtils.isBlank(dsId)) {
-            throw new IllegalArgumentException("process Value failed, the variable DS_ID is required.");
+        Long dsId = query.getDsId();
+        if (dsId == null) {
+            throw new IllegalArgumentException("process Value failed, dataSourceId is required.");
         }
 
-        SensitiveConfig conf = configService.fetchSensitiveConfigByDs(Long.parseLong(dsId));
+        SensitiveConfig conf = configService.fetchSensitiveConfigByDs(dsId);
         //        SensitiveConfig conf = (SensitiveConfig) this.cacheService.getObjectIfAbsent("ValueProcess-cache-key-" + dsId, s -> {
         //            return configService.fetchSensitiveConfigByDs(Long.parseLong(dsId));
         //        });
@@ -97,32 +96,38 @@ public class SecValueProcessServiceProvider implements ValueProcessService {
         String rowAlgorithm = SenAlgorithm.SEN_ORIGINAL;
 
         SenColValue[] colValues = new SenColValue[colMeta.length];
-        if (CollectionUtils.isNotEmpty(query.getColumnList())) {
-            int i = 0;
-            for (String s : meta.keySet()) {
-                ColMetaData metaData = meta.get(s);
-                colValues[i] = new SenColValue(metaData, rowData.get(i), SenAlgorithm.SEN_ORIGINAL);
+        Map<String, ColumnConfig> resultConfig = query.getColumnList();
+        if (resultConfig == null) {
+            resultConfig = Collections.emptyMap();
+        }
+
+        int i = 0;
+        for (String columnName : meta.keySet()) {
+            ColMetaData metaData = meta.get(columnName);
+            colValues[i] = new SenColValue(metaData, rowData.get(i), SenAlgorithm.SEN_ORIGINAL);
+            ColumnConfig colConfig = resultConfig.get(columnName);
+            boolean usingValueProcess = query.isUsingValueProcess();
+            if (colConfig != null) {
+                usingValueProcess = colConfig.isUsingValueProcess();
+            }
+
+            if (usingValueProcess) {
                 CheckerData checkerData = this.createCheckerData(i, query, conf, colValues[i], flash);
-                List<RealColumn> realColumns = query.getColumnList().get(s);
-                for (RealColumn column : realColumns) {
-                    if (!column.isSkipDesensitization()) {
+                if (colConfig == null || CollectionUtils.isEmpty(colConfig.getSourceNames())) {
+                    rowAlgorithm = doCheck(query, conf, checkerData, allColumns, rowAlgorithm, colValues[i]);
+                } else {
+                    for (SourceName sourceName : colConfig.getSourceNames()) {
                         RuleDomain domain = checkerData.getDomain();
                         RdbValueDomain valueDomain = (RdbValueDomain) domain;
-                        valueDomain.setCatalog(column.getCatalog());
-                        valueDomain.setSchema(column.getSchema());
-                        valueDomain.setTable(column.getTable());
-                        valueDomain.setColumn(column.getColumn());
+                        valueDomain.setCatalog(sourceName.catalog());
+                        valueDomain.setSchema(sourceName.schema());
+                        valueDomain.setTable(sourceName.table());
+                        valueDomain.setColumn(sourceName.column());
                         rowAlgorithm = doCheck(query, conf, checkerData, allColumns, rowAlgorithm, colValues[i]);
                     }
                 }
-                i++;
             }
-        } else {
-            for (int i = 0; i < colMeta.length; i++) {
-                colValues[i] = new SenColValue(colMeta[i], rowData.get(i), SenAlgorithm.SEN_ORIGINAL);
-                CheckerData checkerData = this.createCheckerData(i, query, conf, colValues[i], flash);
-                rowAlgorithm = doCheck(query, conf, checkerData, allColumns, rowAlgorithm, colValues[i]);
-            }
+            i++;
         }
 
         if (!StringUtils.equalsIgnoreCase(rowAlgorithm, SenAlgorithm.SEN_ORIGINAL)) {
@@ -180,23 +185,10 @@ public class SecValueProcessServiceProvider implements ValueProcessService {
         String column = senCol.getColMeta().getColumn();
         List<UmiTypes> typesList = getDsLevels(flash);
 
-        if (CollectionUtils.isNotEmpty(query.getResource())) {
-            Map<TargetType, String> stringMap = query.getResource().get(0);
-            catalog = typesList.contains(UmiTypes.Catalog) ? stringMap.get(TargetType.Catalog) : null;
-            schema = typesList.contains(UmiTypes.Schema) ? stringMap.get(TargetType.Schema) : null;
-            if (stringMap.containsKey(TargetType.Table)) {
-                table = stringMap.get(TargetType.Table);
-            } else if (stringMap.containsKey(TargetType.View)) {
-                table = stringMap.get(TargetType.View);
-            } else if (stringMap.containsKey(TargetType.Materialized)) {
-                table = stringMap.get(TargetType.Materialized);
-            }
-        }
-
         RdbValueDomain domain = new RdbValueDomain();
 
-        domain.setSqlType(query.getQueryType());
-        domain.setAuditKind(query.getQueryType().getAuditKind());
+        domain.setSqlType(RuleQueryType.SELECT);
+        domain.setAuditKind(SecQueryKind.QUERY);
         domain.setOptions(Collections.emptyMap());
 
         domain.setCatalog(catalog);
@@ -215,10 +207,6 @@ public class SecValueProcessServiceProvider implements ValueProcessService {
         domain.setDsId(conf.getDsId());
         domain.setDsName(conf.getDsName());
         domain.setDsType(conf.getDsType());
-        Map<String, String> variables = query.getVariables();
-        domain.setUserName(variables.get(ExecuteVariables.USER_NAME));
-        domain.setUserRole(variables.get(ExecuteVariables.ROLE_NAME));
-
         CheckerData checkerData = new CheckerData(query.getQueryBody(), domain);
         checkerData.setDsLevelsDef(typesList);
         checkerData.setCurrentCatalog(catalog); // default, domain.catalog is first

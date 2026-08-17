@@ -1,17 +1,7 @@
 <template>
   <div class="ticket-container">
     <div class="table-list-layout">
-      <nav class="ticket-tabs">
-        <button
-          v-for="tab in ticketTabs"
-          :key="tab.name"
-          class="ticket-tabs__item"
-          :class="{ 'is-active': ticketListType === tab.name }"
-          @click="handleTabClick(tab.name)"
-        >
-          {{ tab.label }}
-        </button>
-      </nav>
+      <AppPageTabs :model-value="ticketListType" :tabs="ticketTabs" @change="handleTabClick" />
       <div class="table-list">
         <div class="content">
           <div class="option">
@@ -24,11 +14,11 @@
                 style="width: 300px; margin-right: 4px"
                 clearable
               />
-              <Select style="width: 120px; margin-right: 4px" v-model="searchKey.ticketStatus" clearable>
-                <Option v-for="(status, key) in ticketStatusList" :value="key" :key="key">
-                  {{ status }}
-                </Option>
+              <Select v-model="searchKey.queryType" style="width: 120px; margin-right: 4px">
+                <Option value="TITLE">{{ $t('biao-ti') }}</Option>
+                <Option value="BIZ_ID">{{ $t('gong-dan-hao') }}</Option>
               </Select>
+              <Input :placeholder="ticketQueryPlaceholder" v-model="searchKey.queryValue" style="width: 280px; margin-right: 4px" clearable />
               <Select
                 style="width: 220px; margin-right: 4px"
                 v-model="searchKey.dsIds"
@@ -40,12 +30,6 @@
                   {{ ds.objName }}
                 </Option>
               </Select>
-              <Input
-                :placeholder="$t('qing-shu-ru-gong-dan-biao-ti-guan-jian-zi-cha-xun')"
-                v-model="searchKey.ticketTitleName"
-                style="width: 280px; margin-right: 4px"
-                clearable
-              />
               <Button type="primary" ghost class="ticket-search-btn" @click="listTickets">
                 {{ $t('cha-xun') }}
               </Button>
@@ -54,7 +38,9 @@
               <Button @click="handleExportSql" :loading="exportLoading" style="margin-right: 10px" type="primary" ghost>
                 {{ $t('dao-chu-sql-jiao-ben') }}
               </Button>
-              <Button @click="handleShowStat" style="margin-right: 10px" type="primary" ghost>{{ $t('an-ku-hui-zong') }}</Button>
+              <Button @click="handleShowStat" style="margin-right: 10px" type="primary" ghost>
+                {{ $t('an-ku-hui-zong') }}
+              </Button>
               <Button
                 @click="handleShowTicketCreateModal"
                 style="margin-right: 10px"
@@ -78,6 +64,18 @@
                   <CustomIcon type="icon-v2-TicketAuth" />
                   {{ row.targetInfo }}
                 </span>
+                <div v-else-if="['DM_QUERY', 'DM_CHANGE'].includes(row.approBiz)" class="ticket-resource">
+                  <DataSourceIcon
+                    class="ticket-resource__icon"
+                    size="24px"
+                    :type="row.resourceType || 'DataBase'"
+                    :instanceType="row.deployEnvType"
+                    leftMargin="0"
+                  />
+                  <div class="ticket-resource__name" :title="row.resourceDesc || row.resourceName || '-'">
+                    {{ row.resourceDesc || row.resourceName || '-' }}
+                  </div>
+                </div>
                 <span v-else>
                   <CustomIcon :type="`icon-v2-${row.resourceType}`" :instanceType="row.deployEnvType"></CustomIcon>
                   {{ row.targetInfo }}
@@ -129,7 +127,9 @@
       </div>
       <template #footer>
         <Button @click="handleCloseTicketCreateModal">{{ $t('qu-xiao') }}</Button>
-        <Button type="primary" @click="handleCreateTicket" :disabled="!ticketType">{{ $t('ti-jiao-gong-dan') }}</Button>
+        <Button type="primary" @click="handleCreateTicket" :disabled="!ticketType">
+          {{ $t('ti-jiao-gong-dan') }}
+        </Button>
       </template>
     </CCModal>
     <CCModal v-model="showStatModal" :title="$t('gong-dan-an-ku-hui-zong')" width="760px" :footer-hide="true">
@@ -151,13 +151,15 @@
 
 <script>
 import { mapState } from 'vuex';
-import { TICKET_STATUS, TICKET_STATUS_COLOR, TICKET_WAIT_STATUS } from '@/const';
+import { TICKET_STATUS, TICKET_STATUS_COLOR } from '@/const';
 import { APPROV_BIZ_MAP } from './constant';
+import AppPageTabs from '@/components/layout/AppPageTabs';
 import CustomIcon from '@/components/function/CustomIcon.vue';
+import DataSourceIcon from '@/components/function/DataSourceIcon';
 
 export default {
   name: 'Ticket',
-  components: { CustomIcon },
+  components: { AppPageTabs, CustomIcon, DataSourceIcon },
   data() {
     return {
       showTicketCreateModal: false,
@@ -172,9 +174,10 @@ export default {
       ],
       searchKey: {
         daterange: [],
-        ticketStatus: '',
+        queryType: 'BIZ_ID',
+        queryValue: '',
         type: '',
-        ticketTitleName: ''
+        dsIds: []
       },
       ticketColumns: [
         {
@@ -222,7 +225,7 @@ export default {
           slot: 'action'
         }
       ],
-      pageSize: 40,
+      pageSize: 20,
       pageNum: 1,
       total: 0,
       dsList: [],
@@ -243,13 +246,11 @@ export default {
     this.listTickets();
   },
   computed: {
-    ticketStatusList() {
-      return this.ticketListType === 'WAIT_SELF_PROCESS' ? TICKET_WAIT_STATUS : TICKET_STATUS;
-    },
-    styleVar() {
-      return (ticketStatus) => ({
-        '--status-color': TICKET_STATUS_COLOR[ticketStatus]
-      });
+    ticketQueryPlaceholder() {
+      if (this.searchKey.queryType === 'BIZ_ID') {
+        return this.$t('qing-shu-ru-gong-dan-hao-cha-xun');
+      }
+      return this.$t('qing-shu-ru-gong-dan-biao-ti-guan-jian-zi-cha-xun');
     },
     TICKET_STATUS() {
       return TICKET_STATUS;
@@ -315,14 +316,22 @@ export default {
     },
     async listTickets() {
       this.loading = true;
+      let ticketBizId = null;
+      let ticketTitleName = null;
+      const queryValue = this.searchKey.queryValue.trim();
+      if (this.searchKey.queryType === 'BIZ_ID') {
+        ticketBizId = queryValue || null;
+      } else {
+        ticketTitleName = queryValue || null;
+      }
       const res = await this.$services.rdpTicketListBasic({
         data: {
           ticketId: null,
           userName: '',
           startTimeMs: new Date(this.searchKey.daterange[0]).getTime(),
           endTimeMs: new Date(this.searchKey.daterange[1]).getTime(),
-          ticketTitleName: this.searchKey.ticketTitleName,
-          ticketStatus: this.searchKey.ticketStatus,
+          ticketBizId,
+          ticketTitleName,
           ticketListType: this.ticketListType,
           dsIds: this.searchKey.dsIds && this.searchKey.dsIds.length ? this.searchKey.dsIds : null,
           page: {
@@ -355,16 +364,7 @@ export default {
       this.statLoading = true;
       try {
         const res = await this.$services.rdpTicketStatByDs({
-          data: {
-            ticketId: null,
-            userName: '',
-            startTimeMs: new Date(this.searchKey.daterange[0]).getTime(),
-            endTimeMs: new Date(this.searchKey.daterange[1]).getTime(),
-            ticketTitleName: this.searchKey.ticketTitleName,
-            ticketStatus: this.searchKey.ticketStatus,
-            ticketListType: this.ticketListType,
-            dsIds: this.searchKey.dsIds && this.searchKey.dsIds.length ? this.searchKey.dsIds : null
-          }
+          data: this.buildTicketQueryPayload()
         });
         this.statData = res.success ? res.data || [] : [];
       } catch (error) {
@@ -374,20 +374,31 @@ export default {
         this.statLoading = false;
       }
     },
+    buildTicketQueryPayload() {
+      let ticketBizId = null;
+      let ticketTitleName = null;
+      const queryValue = (this.searchKey.queryValue || '').trim();
+      if (this.searchKey.queryType === 'BIZ_ID') {
+        ticketBizId = queryValue || null;
+      } else {
+        ticketTitleName = queryValue || null;
+      }
+      return {
+        ticketId: null,
+        userName: '',
+        startTimeMs: new Date(this.searchKey.daterange[0]).getTime(),
+        endTimeMs: new Date(this.searchKey.daterange[1]).getTime(),
+        ticketBizId,
+        ticketTitleName,
+        ticketListType: this.ticketListType,
+        dsIds: this.searchKey.dsIds && this.searchKey.dsIds.length ? this.searchKey.dsIds : null
+      };
+    },
     async handleExportSql() {
       this.exportLoading = true;
       try {
         const res = await this.$services.rdpTicketExportSql({
-          data: {
-            ticketId: null,
-            userName: '',
-            startTimeMs: new Date(this.searchKey.daterange[0]).getTime(),
-            endTimeMs: new Date(this.searchKey.daterange[1]).getTime(),
-            ticketTitleName: this.searchKey.ticketTitleName,
-            ticketStatus: this.searchKey.ticketStatus,
-            ticketListType: this.ticketListType,
-            dsIds: this.searchKey.dsIds && this.searchKey.dsIds.length ? this.searchKey.dsIds : null
-          }
+          data: this.buildTicketQueryPayload()
         });
         if (res.success && res.data) {
           const blob = new Blob([res.data], { type: 'text/plain;charset=utf-8' });
@@ -420,47 +431,31 @@ export default {
   overflow: hidden;
 }
 
-.ticket-tabs {
+.ticket-resource {
   display: flex;
+  min-width: 0;
+  min-height: 32px;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 0;
-  background: var(--bg-card);
+  gap: 8px;
+}
 
-  &__item {
-    position: relative;
-    padding: 12px 20px 10px;
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: 400;
-    line-height: 1.4;
-    border: none;
-    border-bottom: none;
-    background: none;
-    cursor: pointer;
-    transition: color 0.12s ease;
+.ticket-resource__icon {
+  display: inline-flex;
+  width: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+}
 
-    &:hover {
-      color: var(--text-primary);
-    }
-
-    &.is-active {
-      color: var(--text-primary);
-      font-weight: 500;
-
-      &::after {
-        content: '';
-        position: absolute;
-        left: 20px;
-        right: 20px;
-        bottom: 0;
-        height: 2px;
-        border-radius: 2px 2px 0 0;
-        background: var(--primary-color);
-      }
-    }
-  }
+.ticket-resource__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
 }
 .stat-center {
   padding: 24px 0;

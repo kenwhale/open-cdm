@@ -6,6 +6,7 @@
   display: flex;
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--shell-bg);
 }
@@ -14,6 +15,7 @@
   width: @shell-sidebar-width;
   flex-shrink: 0;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: transparent;
@@ -245,6 +247,7 @@
   flex: 1;
   min-width: 0;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -343,6 +346,149 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+
+    > * {
+      min-width: 0;
+    }
+  }
+}
+
+// MacBook-sized viewports and browser zoom reduce the effective CSS width
+// before they become phone-sized. Keep navigation usable while returning
+// space to the work area at those intermediate widths.
+@media (max-width: 1439px) {
+  .app-sidebar {
+    width: 208px;
+  }
+
+  .app-main-body {
+    padding: 12px 12px 12px 6px;
+  }
+}
+
+@media (max-width: 1199px) {
+  .app-sidebar {
+    width: 176px;
+
+    .app-sidebar-section {
+      padding: 0 8px;
+    }
+
+    .app-sidebar-item,
+    .app-sidebar-group-toggle {
+      padding-right: 10px;
+      padding-left: 10px;
+    }
+  }
+
+  .app-content-header {
+    padding: 12px 16px;
+
+    &__right {
+      gap: 8px;
+    }
+
+    &__link {
+      width: 32px;
+      padding: 0;
+      justify-content: center;
+
+      span {
+        display: none;
+      }
+    }
+  }
+}
+
+@media (max-width: 1023px) {
+  .app-sidebar {
+    width: 160px;
+  }
+
+  .app-main-body {
+    padding: 8px 8px 8px 4px;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-sidebar {
+    width: 64px;
+
+    .app-sidebar-brand {
+      justify-content: center;
+      padding: 18px 8px 14px;
+
+      .app-brand-logo__img {
+        width: 48px;
+        height: auto;
+        max-width: 48px;
+      }
+    }
+
+    .app-sidebar-section {
+      padding: 0 8px;
+    }
+
+    .app-sidebar-divider {
+      margin: 8px 12px;
+    }
+
+    .app-sidebar-item,
+    .app-sidebar-group-toggle,
+    .app-sidebar-subgroup-toggle {
+      justify-content: center;
+      min-height: 38px;
+      padding: 0;
+      gap: 0;
+
+      span {
+        display: none;
+      }
+    }
+
+    .app-sidebar-group-body,
+    .app-sidebar-subgroup-body {
+      display: none !important;
+    }
+
+    .app-sidebar-footer {
+      justify-content: center;
+      padding: 12px 8px 14px;
+    }
+
+    .app-sidebar-version-chip {
+      width: 8px;
+      min-width: 8px;
+      height: 8px;
+      min-height: 8px;
+      padding: 0;
+      border-radius: 50%;
+      color: transparent;
+      overflow: hidden;
+    }
+  }
+
+  .app-main-body {
+    padding: 8px 8px 8px 0;
+  }
+
+  .app-content-header {
+    min-height: 48px;
+    padding: 10px 12px;
+
+    &__right {
+      gap: 8px;
+    }
+
+    &__link {
+      width: 32px;
+      padding: 0;
+      justify-content: center;
+
+      span {
+        display: none;
+      }
+    }
   }
 }
 
@@ -353,6 +499,7 @@
   flex-direction: column;
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg-primary);
 }
@@ -433,6 +580,7 @@
 
 .home--sql {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 

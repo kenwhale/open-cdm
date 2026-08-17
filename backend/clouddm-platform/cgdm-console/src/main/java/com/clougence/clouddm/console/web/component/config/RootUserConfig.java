@@ -241,6 +241,12 @@ public class RootUserConfig {
     private Boolean       dmEnableMCP;
     @UserConfigDef(name = "sqlAuditRetentionDays", defaultValue = "30", descKey = I18nUserConfigMsgKeys.SQL_AUDIT_RETENTION_DAYS, valueRange = "1 - 60", configTagType = UserConfigTagType.COMMON, confBelong = ConfBelong.CloudDM)
     private String        sqlAuditRetentionDays;
+    @UserConfigDef(name = "approvalSqlFileMaxMegaByte", defaultValue = "20", descKey = I18nUserConfigMsgKeys.APPROVAL_SQL_FILE_MAX_MB, valueRange = "1 ~ 20 MB", configTagType = UserConfigTagType.COMMON, confBelong = ConfBelong.CloudDM)
+    private Integer       approvalSqlFileMaxMegaByte;
+    @UserConfigDef(name = "approvalDmlExplainMaxStatements", defaultValue = "100", descKey = I18nUserConfigMsgKeys.APPROVAL_DML_EXPLAIN_MAX_STATEMENTS, valueRange = "1 ~ 10000", configTagType = UserConfigTagType.COMMON, confBelong = ConfBelong.CloudDM)
+    private Integer       approvalDmlExplainMaxStatements;
+    @UserConfigDef(name = "approvalDmlExplainMaxStatementMegaByte", defaultValue = "1", descKey = I18nUserConfigMsgKeys.APPROVAL_DML_EXPLAIN_MAX_STATEMENT_MB, valueRange = "1 ~ 20 MB", configTagType = UserConfigTagType.COMMON, confBelong = ConfBelong.CloudDM)
+    private Integer       approvalDmlExplainMaxStatementMegaByte;
     @UserConfigDef(name = "defaultColumnDisplayChars", defaultValue = "250", valueRange = "10~500, default 250", descKey = I18nUserConfigMsgKeys.SQL_RESULT_COL_MAXIMUM_DISPLAY_SIZE, configTagType = UserConfigTagType.QUERY_RESULT, confBelong = ConfBelong.CloudDM)
     private Integer       defaultColumnDisplayChars;
     @UserConfigDef(name = "consoleMetadataCache", defaultValue = "true", valueRange = "true, false", descKey = I18nUserConfigMsgKeys.SQL_RESULT_METADATA_CACHE, configTagType = UserConfigTagType.QUERY_RESULT, confBelong = ConfBelong.CloudDM)
@@ -250,6 +256,8 @@ public class RootUserConfig {
     private Integer       languageMaxRequests;
     @UserConfigDef(name = "languageMaxRequestsByUser", defaultValue = "2", valueRange = "1 ~ 3", descKey = I18nUserConfigMsgKeys.LANGUAGE_MAX_REQUESTS_BY_USER, configTagType = UserConfigTagType.COMMON, confBelong = ConfBelong.CloudDM)
     private Integer       languageMaxRequestsByUser;
+    @UserConfigDef(name = "languageMaxRequestKiloByte", defaultValue = "1024", valueRange = "64 ~ 16384 KiB", descKey = I18nUserConfigMsgKeys.LANGUAGE_MAX_REQUEST_KB, configTagType = UserConfigTagType.COMMON, confBelong = ConfBelong.CloudDM)
+    private Integer       languageMaxRequestKiloByte;
 
     /**
      * Query Result

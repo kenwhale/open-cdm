@@ -16,6 +16,7 @@
 package com.clougence.dslparser.detectrule;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -38,7 +39,7 @@ import com.clougence.dslparser.detectrule.test.TestRuleDomain;
 import com.clougence.dslparser.detectrule.test.func.FuncGroupUtils;
 import com.clougence.dslparser.detectrule.test.func.FuncStringUtils;
 import com.clougence.dslparser.detectrule.test.rule.RdbColumnDomain;
-import com.clougence.dslparser.detectrule.test.rule.SecQueryType;
+import com.clougence.dslparser.detectrule.test.rule.SplitQueryType;
 import com.clougence.dslparser.detectrule.test.rule.SqlDdlKind;
 import com.clougence.dslpaser.antlr.DslHelper;
 import com.clougence.dslpaser.ast.StatementSet;
@@ -46,16 +47,15 @@ import com.clougence.utils.CollectionUtils;
 
 public class TestCase {
 
-    static {
-        DslHelper.register("DetectRule", new DetectRuleDslProvider());
-    }
-
     public static Object runScript(String script, Object domainData, Type domainType) {
         return runScript(script, domainData, domainType, null);
     }
 
     public static Object runScript(String script, Object domainData, Type domainType, Map<String, String> vars) {
-        StatementSet statements = DslHelper.parserDsl("DetectRule", script);
+        StatementSet statements;
+        try (StringReader reader = new StringReader(script)) {
+            statements = DslHelper.parserDsl(DetectRuleDslProvider.INSTANCE, reader);
+        }
 
         EngineOption option = new EngineOption();
         option.setDataTimeValueParser(new DefaultDataTimeValueParser());
@@ -68,7 +68,10 @@ public class TestCase {
     }
 
     public static Object runScript(String script, Object domainData, Type domainType, Map<String, String> vars, DetectRulesFeature[] features) throws IOException {
-        StatementSet statements = DslHelper.parserDsl("DetectRule", script);
+        StatementSet statements;
+        try (StringReader reader = new StringReader(script)) {
+            statements = DslHelper.parserDsl(DetectRuleDslProvider.INSTANCE, reader);
+        }
 
         EngineOption option = new EngineOption();
         option.setDataTimeValueParser(new DefaultDataTimeValueParser());
@@ -92,7 +95,7 @@ public class TestCase {
         domainData.getDomain().setPrimary(true);
 
         domainData.getDomain().setDdlKind(SqlDdlKind.Create);
-        domainData.getDomain().setSqlType(SecQueryType.INSERT);
+        domainData.getDomain().setSqlType(SplitQueryType.INSERT);
 
         domainData.getStringList().add("a");
         domainData.getStringList().add("b");
@@ -1678,8 +1681,8 @@ public class TestCase {
     @Test
     public void domainExprTest() throws IOException {
         TestRuleDomain domainData = this.createDomain();
-        domainData.getQueryTypes().add(SecQueryType.CREATE_INDEX);
-        domainData.getQueryTypes().add(SecQueryType.CREATE_TABLE);
+        domainData.getQueryTypes().add(SplitQueryType.CREATE_INDEX);
+        domainData.getQueryTypes().add(SplitQueryType.CREATE_TABLE);
 
         Type domainType = ReflectHelper.resolveDomain(TestRuleDomain.class);
         Object object;

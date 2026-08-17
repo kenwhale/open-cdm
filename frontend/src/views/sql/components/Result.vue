@@ -4,7 +4,8 @@
       <div class="tab-group">
         <a-tabs
           v-model:activeKey="tab.result.active"
-          :style="`width: ${tab.result?.list?.length ? '110px' : '100%'}`"
+          class="message-tabs"
+          :class="{ 'message-tabs--with-results': tab.result?.list?.length }"
           type="card"
           @tabClick="handleResultTabChange"
         >
@@ -28,7 +29,7 @@
                   type="icon-v2-close2"
                   hoverStyle
                   customStyle="radius-hover"
-                  @click.native="handleCloseResultTab('current', res.resultId)"
+                  @click.native.stop="handleCloseResultTab('current', res.resultId)"
                 />
               </div>
             </template>
@@ -43,7 +44,11 @@
                       <CustomIcon type="icon-v2-Table" />
                       <div style="margin-left: 5px; white-space: nowrap">{{ `${$t('jie-guo')}${res.showIndex}` }}</div>
                       <div class="dropdown-item-close">
-                        <CustomIcon type="icon-v2-close2" customStyle="icon-v2-hover" @click.native="handleCloseResultTab('current', res.resultId)" />
+                        <CustomIcon
+                          type="icon-v2-close2"
+                          customStyle="icon-v2-hover"
+                          @click.native.stop="handleCloseResultTab('current', res.resultId)"
+                        />
                       </div>
                     </div>
                   </a-menu-item>
@@ -53,16 +58,21 @@
           </template>
         </a-tabs>
       </div>
-      <div id="result-info-container" class="result-info-container" style="height: 100%" v-if="tab.result.active === 'message'">
-        <div class="result-info-messages">
+      <div class="result-info-container" style="height: 100%" v-if="tab.result.active === 'message'">
+        <div ref="resultInfoMessages" class="result-info-messages sql-editor-typography">
           <div v-for="(info, index) in tab.executeInfo" :key="index" class="result-info">
-            <div class="info" v-if="info.resultType === 'QueryScript'">
+            <div class="info info--query" v-if="info.resultType === 'QueryScript'">
               <div class="level">{{ info.line }}</div>
-              <div class="message">
-                {{ info.script }}
-              </div>
+              <ExecutionSqlText class="message" :sql="info.script" />
             </div>
-            <div class="info" v-else>
+            <div
+              class="info"
+              :class="{
+                'info--error': info.level === 'Error' || info.level === 'error',
+                'info--warn': info.level === 'Warn' || info.level === 'warn'
+              }"
+              v-else
+            >
               <div class="time">[{{ info.time }}]</div>
               <div :class="`message ${info.level}`">
                 {{ info.message }}
@@ -78,8 +88,8 @@
             <div class="btn-group-item" @click="handleScrollUpMessage">
               <CustomIcon type="icon-v2-scroll_up" size="18px" />
             </div>
-            <div class="btn-group-item" @click="handleScrollDownMessage">
-              <CustomIcon type="icon-v2-scroll_down" size="18px" :custom-style="tab.executeInfoScrollDown ? 'btn-group-item-hover' : ''" />
+            <div class="btn-group-item" :class="{ 'btn-group-item--active': tab.executeInfoScrollDown }" @click="handleScrollDownMessage">
+              <CustomIcon type="icon-v2-scroll_down" size="18px" />
             </div>
             <div class="btn-group-item" @click="handleClearMessage">
               <CustomIcon type="icon-v2-Delete2" size="18px" />
@@ -88,14 +98,14 @@
         </div>
       </div>
       <div
-        v-if="!['message', 'async'].includes(tab.result.active)"
+        v-if="!['message', 'async'].includes(tab.result.active) && selectedTab.resultId"
         class="result-content-wrapper"
         style="display: flex; flex-direction: column; flex: 1; min-height: 0"
       >
         <div class="tip-footer">
           <div class="tip-footer-main">
             <div v-if="selectedTab.receiveMode !== 'STREAM'" class="tip-footer-page">
-              <div v-if="selectedTab.receiveMode === 'PAGINATED' && paginatedLoading[selectedTab.resultId]" class="paginated-loading">
+              <div v-if="tab.running && selectedTab.receiveMode === 'PAGINATED' && paginatedLoading[selectedTab.resultId]" class="paginated-loading">
                 <div class="loading-spinner"></div>
               </div>
               <Page
@@ -174,6 +184,7 @@
         <div class="result-table-container" v-if="selectedTab">
           <a-table
             class="result-set-style"
+            :class="{ 'result-set-style--empty': !selectedTab.showData?.length }"
             :ref="`result_table_${tab.result.active}`"
             :columns="antdColumns"
             :dataSource="selectedTab.showData"
@@ -196,10 +207,10 @@
               <template v-if="column.dataIndex !== 'seq'">
                 <div class="vxe-input-tpl" @dblclick.stop="handleCellDetail(record, column, index)">
                   <span v-if="record[column.dataIndex] === null" style="color: #ccc; font-style: italic">NULL</span>
-                  <pre v-else style="overflow: hidden; margin: 0" v-html="record[column.dataIndex]"></pre>
+                  <pre v-else style="overflow: hidden; margin: 0">{{ record[column.dataIndex] }}</pre>
                   <div v-if="!getCellComplete(column, index)" class="cell-incomplete-badge"></div>
                   <div class="op">
-                    <div @click.stop="handleCellCopy(record[column.dataIndex])" style="margin-right: 3px">
+                    <div @click.stop="handleCellCopy(record, column, index)" style="margin-right: 3px">
                       <cc-iconfont name="copy" :size="12" />
                     </div>
                     <div @click.stop="handleCellDetail(record, column, index)">
@@ -396,6 +407,7 @@
   </div>
 </template>
 <script lang="jsx">
+import appLogger from '@/utils/logger';
 import dayjs from 'dayjs';
 import { Modal, Tooltip } from 'ant-design-vue';
 import { mysqlInsert, pgInsert } from '@/views/sql/components/typeGroup';
@@ -403,6 +415,7 @@ import copyMixin from '@/mixins/copyMixin';
 import { EVENT_BUS_NAME_LIST } from '@/utils/eventBusName';
 import { mapGetters, mapState } from 'vuex';
 import CustomIcon from '@/components/function/CustomIcon.vue';
+import ExecutionSqlText from '@/views/sql/components/ExecutionSqlText.vue';
 import ContextMenu from '@imengyu/vue3-context-menu';
 import XEClipboard from 'xe-clipboard';
 
@@ -413,7 +426,8 @@ export default {
     tab: Object
   },
   components: {
-    CustomIcon
+    CustomIcon,
+    ExecutionSqlText
     // AsyncJobDetail,
     // AsyncJobList
   },
@@ -473,7 +487,7 @@ export default {
       exportConfig: {},
       editorHeight: 250,
       paginatedLoading: {}, // Loading status for each result set
-      paginatedLoadingTimer: null, // Loading timer
+      paginatedLoadingTimers: {}, // Loading timers keyed by result set
       columnWidths: {}, // Stored column widths
       tableScrollY: 240,
       tableResizeObserver: null
@@ -511,18 +525,18 @@ export default {
       ];
     },
     selectedTab() {
-      if (!['message'].includes(this.tab.result.active)) {
-        let tab = {};
-        for (let i = 0; i < this.tab.result.list.length; i++) {
-          if (this.tab.result.list[i].resultId === this.tab.result.active) {
-            tab = this.tab.result.list[i];
-            break;
-          }
-        }
-        return tab;
-      } else {
+      if (['message', 'async'].includes(this.tab.result.active)) {
         return {};
       }
+      const matched = this.tab.result.list.find((item) => item.resultId === this.tab.result.active);
+      return matched || {};
+    },
+    selectedResultProgress() {
+      return {
+        resultId: this.selectedTab.resultId,
+        receiveMode: this.selectedTab.receiveMode,
+        fetchCount: this.selectedTab.fetchCount
+      };
     },
     antdColumns() {
       if (!this.selectedTab || !this.selectedTab.columnListSeq) {
@@ -564,22 +578,27 @@ export default {
     }
   },
   watch: {
-    // Show loading when fetchCount changes in PAGINATED mode.
-    'selectedTab.fetchCount': {
-      handler(newVal, oldVal) {
-        if (this.selectedTab?.receiveMode === 'PAGINATED' && this.selectedTab?.resultId) {
-          if (newVal !== undefined && oldVal !== undefined && newVal > oldVal) {
-            this.paginatedLoading[this.selectedTab.resultId] = true;
-            if (this.paginatedLoadingTimer) {
-              clearTimeout(this.paginatedLoadingTimer);
-            }
-            this.paginatedLoadingTimer = setTimeout(() => {
-              if (this.selectedTab?.resultId) {
-                this.paginatedLoading[this.selectedTab.resultId] = false;
-              }
-            }, 2000);
-          }
+    selectedResultProgress: {
+      handler(current, previous) {
+        if (!this.tab.running || current.receiveMode !== 'PAGINATED' || !current.resultId) {
+          return;
         }
+        if (!previous || current.resultId !== previous.resultId) {
+          return;
+        }
+        if (current.fetchCount === undefined || previous.fetchCount === undefined || current.fetchCount <= previous.fetchCount) {
+          return;
+        }
+
+        const resultId = current.resultId;
+        this.paginatedLoading[resultId] = true;
+        if (this.paginatedLoadingTimers[resultId]) {
+          clearTimeout(this.paginatedLoadingTimers[resultId]);
+        }
+        this.paginatedLoadingTimers[resultId] = setTimeout(() => {
+          this.paginatedLoading[resultId] = false;
+          delete this.paginatedLoadingTimers[resultId];
+        }, 2000);
       },
       immediate: false
     },
@@ -588,14 +607,20 @@ export default {
         if (running) {
           return;
         }
-        if (this.paginatedLoadingTimer) {
-          clearTimeout(this.paginatedLoadingTimer);
-          this.paginatedLoadingTimer = null;
+        const loadingTimerIds = Object.keys(this.paginatedLoadingTimers);
+        for (let i = 0; i < loadingTimerIds.length; i++) {
+          clearTimeout(this.paginatedLoadingTimers[loadingTimerIds[i]]);
         }
+        this.paginatedLoadingTimers = {};
         const resultIds = Object.keys(this.paginatedLoading);
         for (let i = 0; i < resultIds.length; i++) {
           this.paginatedLoading[resultIds[i]] = false;
         }
+      }
+    },
+    'tab.result.list.length'(length) {
+      if (!length && !['message', 'async'].includes(this.tab.result.active)) {
+        this.tab.result.active = 'message';
       }
     },
     'tab.result.active'(activeKey) {
@@ -660,13 +685,14 @@ export default {
     this.$bus.off('consoleMessageAppend');
     this.$bus.off(EVENT_BUS_NAME_LIST.GET_RESULT_EXPORT_INFO);
     this.$bus.off(EVENT_BUS_NAME_LIST.WS_RES_EXPORT_EVENT);
-    if (this.paginatedLoadingTimer) {
-      clearTimeout(this.paginatedLoadingTimer);
+    const loadingTimerIds = Object.keys(this.paginatedLoadingTimers);
+    for (let i = 0; i < loadingTimerIds.length; i++) {
+      clearTimeout(this.paginatedLoadingTimers[loadingTimerIds[i]]);
     }
   },
   methods: {
     handleClickCostPop() {
-      console.warn(123, this.tab);
+      appLogger.warn(123, this.tab);
     },
     handleResize(e, column) {
       const startX = e.clientX;
@@ -711,7 +737,7 @@ export default {
       return (page - 1) * pageSize + index + 1;
     },
     onContextmenu(event, tab) {
-      console.log(event, tab);
+      appLogger.debug(event, tab);
       this.contextData = tab;
       ContextMenu.showContextMenu({
         zIndex: 999,
@@ -725,14 +751,17 @@ export default {
           }
         ],
         event,
-        customClass: 'custom-class',
-        minWidth: 100
+        customClass: 'sql-context-menu',
+        minWidth: 176
       });
     },
     handleCloseResultTab(type, key) {
-      console.log(type, key);
+      appLogger.debug(type, key);
       if (type === 'current') {
         const deleteIndex = this.tab.result.list.findIndex((tab) => tab.resultId === key);
+        if (deleteIndex < 0) {
+          return;
+        }
         const closingTab = this.tab.result.list[deleteIndex];
         if (closingTab) {
           this.callCloseResultWindow(closingTab);
@@ -782,10 +811,17 @@ export default {
       };
 
       this.$services.dmQueryCloseResultWindow(params).catch((error) => {
-        console.error('err:', error);
+        appLogger.error('err:', error);
       });
     },
     handleResultTabChange(activeKey) {
+      if (activeKey !== 'message' && activeKey !== 'async') {
+        const exists = this.tab.result.list.some((item) => item.resultId === activeKey);
+        if (!exists) {
+          this.tab.result.active = 'message';
+          activeKey = 'message';
+        }
+      }
       this.tab.result.active = activeKey;
 
       // process message table scroll position
@@ -794,7 +830,7 @@ export default {
       }
 
       setTimeout(() => {
-        const ele = document.getElementById('result-info-container');
+        const ele = this.$refs.resultInfoMessages;
         if (!ele) {
           return;
         }
@@ -816,14 +852,14 @@ export default {
       });
     },
     handleScrollUpMessage() {
-      const ele = document.getElementById('result-info-container');
+      const ele = this.$refs.resultInfoMessages;
       if (ele) {
         ele.scrollTop = 0;
       }
     },
     handleScrollDownMessage() {
       this.tab.executeInfoScrollDown = !this.tab.executeInfoScrollDown;
-      const ele = document.getElementById('result-info-container');
+      const ele = this.$refs.resultInfoMessages;
       if (ele) {
         ele.scrollTop = ele.scrollHeight;
       }
@@ -835,7 +871,7 @@ export default {
       }
 
       setTimeout(() => {
-        const ele = document.getElementById('result-info-container');
+        const ele = this.$refs.resultInfoMessages;
         if (!ele) {
           return;
         }
@@ -923,143 +959,164 @@ export default {
           }
         ],
         event,
-        customClass: 'custom-class',
+        customClass: 'sql-context-menu',
         zIndex: 99,
-        minWidth: 100
+        minWidth: 176
       });
     },
-    handleCellCopy(value) {
-      if (value !== null && value !== undefined) {
-        if (XEClipboard.copy(value)) {
-          this.$message.success(this.$t('fu-zhi-cheng-gong'));
+    async handleCellCopy(record, column, rowIndex) {
+      const value = record[column.dataIndex];
+      if (value === null || value === undefined) {
+        return;
+      }
+
+      let text = String(value);
+      const cellMeta = this.getCellValueMeta(column, rowIndex);
+      if (cellMeta && !cellMeta.complete && !cellMeta.error && !cellMeta.mask && cellMeta.moreSize > 0) {
+        try {
+          text = await this.fetchFullCellText(cellMeta, text);
+        } catch (error) {
+          appLogger.error('复制单元格完整内容失败:', error);
+          this.$Message.error(this.$t('fu-zhi-shi-bai'));
+          return;
         }
       }
+
+      if (XEClipboard.copy(text)) {
+        this.$message.success(this.$t('fu-zhi-cheng-gong'));
+      }
+    },
+    getCellRowNumber(rowIndex) {
+      const receiveMode = this.selectedTab.receiveMode || 'PAGE_FULL';
+      if (receiveMode === 'PAGINATED') {
+        const pageSize = this.selectedTab.size || 30;
+        return ((this.selectedTab.page || 1) - 1) * pageSize + rowIndex;
+      }
+      if (receiveMode === 'STREAM') {
+        return rowIndex;
+      }
+      const pageSize = this.selectedTab.size || 50;
+      return ((this.selectedTab.page || 1) - 1) * pageSize + rowIndex;
+    },
+    getCellValueMeta(column, rowIndex) {
+      const colIndex = this.selectedTab.columnList?.findIndex((col) => col === column.dataIndex || col === column.property) ?? -1;
+      if (colIndex < 0) {
+        return null;
+      }
+
+      const meta = {
+        resultId: this.selectedTab.resultId,
+        rowNumber: this.getCellRowNumber(rowIndex),
+        colIndex,
+        complete: true,
+        moreSize: 0,
+        totalSize: 0,
+        error: false,
+        mask: false
+      };
+
+      try {
+        const receiveMode = this.selectedTab.receiveMode || 'PAGE_FULL';
+        let cellValue = null;
+
+        if (receiveMode === 'PAGINATED') {
+          const currentPage = this.selectedTab.page || 1;
+          const rowSetCache = this.selectedTab.rowSetCache;
+          if (rowSetCache && rowSetCache[currentPage] && rowSetCache[currentPage][rowIndex]) {
+            const rowItem = rowSetCache[currentPage][rowIndex];
+            const rowData = rowItem.data || rowItem.row;
+            if (rowData && Array.isArray(rowData) && rowData[colIndex]) {
+              cellValue = rowData[colIndex];
+            }
+          }
+        } else if (receiveMode === 'STREAM') {
+          const rowSetStream = this.selectedTab.rowSetStream;
+          const streamData = this.selectedTab.streamData || [];
+          const displayCount = 30;
+          const startIndex = streamData.length > displayCount ? streamData.length - displayCount : 0;
+          const actualIndex = startIndex + rowIndex;
+          if (rowSetStream && rowSetStream[actualIndex]) {
+            const rowItem = rowSetStream[actualIndex];
+            const rowData = rowItem.data || rowItem.row;
+            if (rowData && Array.isArray(rowData) && rowData[colIndex]) {
+              cellValue = rowData[colIndex];
+            }
+          }
+        } else if (this.selectedTab.data && this.selectedTab.data[meta.rowNumber]) {
+          const rowItem = this.selectedTab.data[meta.rowNumber];
+          const rawData = Array.isArray(rowItem) ? rowItem : rowItem.data || rowItem.row;
+          if (rawData && Array.isArray(rawData) && rawData[colIndex]) {
+            cellValue = rawData[colIndex];
+          }
+        }
+
+        if (cellValue) {
+          meta.complete = cellValue.complete !== undefined ? cellValue.complete : true;
+          meta.moreSize = cellValue.moreSize || 0;
+          meta.totalSize = cellValue.totalSize || 0;
+          meta.error = cellValue.error || false;
+          meta.mask = cellValue.mask || false;
+        }
+      } catch (err) {
+        appLogger.debug('获取单元格元数据失败:', err);
+      }
+
+      return meta;
+    },
+    async fetchFullCellText(cellMeta, initialValue) {
+      let content = initialValue || '';
+      let moreSize = cellMeta.moreSize || 0;
+      const fetchSize = 128 * 1024;
+      let guard = 0;
+
+      while (moreSize > 0 && guard < 100) {
+        guard += 1;
+        const res = await this.$services.dmQueryFetchResultData({
+          data: {
+            resultId: cellMeta.resultId,
+            rowNumber: cellMeta.rowNumber,
+            colNumber: cellMeta.colIndex,
+            offset: content.length,
+            fetchSize
+          }
+        });
+
+        if (!res.success || !res.data) {
+          throw new Error(res.message || 'fetch failed');
+        }
+
+        const dataValue = res.data.value || res.data;
+        if (dataValue.error) {
+          throw new Error('fetch error');
+        }
+
+        const chunk = dataValue.value || '';
+        if (!chunk && (dataValue.moreSize || 0) > 0) {
+          throw new Error('empty chunk');
+        }
+
+        content += chunk;
+        moreSize = dataValue.moreSize || 0;
+        if (dataValue.complete) {
+          break;
+        }
+      }
+
+      return content;
     },
     // Get the cell's complete flag to decide whether to show the corner marker.
     getCellComplete(column, rowIndex) {
-      try {
-        const colIndex = this.selectedTab.columnList?.findIndex((col) => col === column.dataIndex || col === column.property) ?? -1;
-        if (colIndex < 0) return true;
-
-        const receiveMode = this.selectedTab.receiveMode || 'PAGE_FULL';
-
-        if (receiveMode === 'PAGINATED') {
-          const currentPage = this.selectedTab.page || 1;
-          const rowSetCache = this.selectedTab.rowSetCache;
-
-          if (rowSetCache && rowSetCache[currentPage] && rowSetCache[currentPage][rowIndex]) {
-            const rowItem = rowSetCache[currentPage][rowIndex];
-            const rowData = rowItem.data || rowItem.row;
-
-            if (rowData && Array.isArray(rowData) && rowData[colIndex]) {
-              return rowData[colIndex].complete !== undefined ? rowData[colIndex].complete : true;
-            }
-          }
-        } else if (receiveMode === 'STREAM') {
-          const rowSetStream = this.selectedTab.rowSetStream;
-          const streamData = this.selectedTab.streamData || [];
-
-          const displayCount = 30;
-          const startIndex = streamData.length > displayCount ? streamData.length - displayCount : 0;
-          const actualIndex = startIndex + rowIndex;
-
-          if (rowSetStream && rowSetStream[actualIndex]) {
-            const rowItem = rowSetStream[actualIndex];
-            const rowData = rowItem.data || rowItem.row;
-
-            if (rowData && Array.isArray(rowData) && rowData[colIndex]) {
-              return rowData[colIndex].complete !== undefined ? rowData[colIndex].complete : true;
-            }
-          }
-        } else {
-          if (this.selectedTab.data && this.selectedTab.data[rowIndex]) {
-            const rowData = this.selectedTab.data[rowIndex];
-            if (Array.isArray(rowData) && rowData[colIndex]) {
-              return rowData[colIndex].complete !== undefined ? rowData[colIndex].complete : true;
-            }
-          }
-        }
-      } catch (err) {
-        console.log('获取单元格 complete 字段失败:', err);
+      const cellMeta = this.getCellValueMeta(column, rowIndex);
+      if (!cellMeta) {
+        return true;
       }
-      return true;
+      return cellMeta.complete;
     },
     handleCellDetail(record, column, rowIndex) {
-      const colIndex = this.selectedTab.columnList?.findIndex((col) => col === column.dataIndex || col === column.property) ?? -1;
-
-      // Calculate the actual row number, accounting for pagination.
-      let rowNumber = rowIndex;
-      if (this.selectedTab.receiveMode === 'PAGINATED') {
-        const pageSize = 30;
-        rowNumber = (this.selectedTab.page - 1) * pageSize + rowIndex;
-      } else if (this.selectedTab.receiveMode === 'STREAM') {
-        rowNumber = rowIndex;
-      } else {
-        const pageSize = 50;
-        rowNumber = (this.selectedTab.page - 1) * pageSize + rowIndex;
-      }
-
+      const cellMeta = this.getCellValueMeta(column, rowIndex);
+      const colIndex = cellMeta ? cellMeta.colIndex : -1;
+      const rowNumber = cellMeta ? cellMeta.rowNumber : rowIndex;
       const cellValue = record[column.dataIndex || column.property] || '';
-
-      let moreSize = 0;
-      let totalSize = 0;
-      let complete = true;
-      let error = false;
-      let mask = false;
-      try {
-        const receiveMode = this.selectedTab.receiveMode || 'PAGE_FULL';
-
-        if (receiveMode === 'PAGINATED') {
-          const currentPage = this.selectedTab.page || 1;
-          const rowSetCache = this.selectedTab.rowSetCache;
-
-          if (rowSetCache && rowSetCache[currentPage] && rowSetCache[currentPage][rowIndex]) {
-            const rowItem = rowSetCache[currentPage][rowIndex];
-            const rowData = rowItem.data || rowItem.row;
-
-            if (rowData && Array.isArray(rowData) && rowData[colIndex]) {
-              moreSize = rowData[colIndex].moreSize || 0;
-              totalSize = rowData[colIndex].totalSize || 0;
-              complete = rowData[colIndex].complete !== undefined ? rowData[colIndex].complete : true;
-              error = rowData[colIndex].error || false;
-              mask = rowData[colIndex].mask || false;
-            }
-          }
-        } else if (receiveMode === 'STREAM') {
-          const rowSetStream = this.selectedTab.rowSetStream;
-          const streamData = this.selectedTab.streamData || [];
-
-          const displayCount = 30;
-          const startIndex = streamData.length > displayCount ? streamData.length - displayCount : 0;
-          const actualIndex = startIndex + rowIndex;
-
-          if (rowSetStream && rowSetStream[actualIndex]) {
-            const rowItem = rowSetStream[actualIndex];
-            const rowData = rowItem.data || rowItem.row;
-
-            if (rowData && Array.isArray(rowData) && rowData[colIndex]) {
-              moreSize = rowData[colIndex].moreSize || 0;
-              totalSize = rowData[colIndex].totalSize || 0;
-              complete = rowData[colIndex].complete !== undefined ? rowData[colIndex].complete : true;
-              error = rowData[colIndex].error || false;
-              mask = rowData[colIndex].mask || false;
-            }
-          }
-        } else {
-          if (this.selectedTab.data && this.selectedTab.data[rowIndex]) {
-            const rowData = this.selectedTab.data[rowIndex];
-            if (Array.isArray(rowData) && rowData[colIndex]) {
-              moreSize = rowData[colIndex].moreSize || 0;
-              totalSize = rowData[colIndex].totalSize || 0;
-              complete = rowData[colIndex].complete !== undefined ? rowData[colIndex].complete : true;
-              error = rowData[colIndex].error || false;
-              mask = rowData[colIndex].mask || false;
-            }
-          }
-        }
-      } catch (err) {
-        console.log('获取单元格原始数据失败:', err);
-      }
 
       this.$bus.emit('showCellDetailModal', {
         row: record,
@@ -1068,17 +1125,17 @@ export default {
         rowNumber,
         colNumber: colIndex,
         cellValue,
-        moreSize,
-        totalSize,
-        complete,
-        error,
-        mask
+        moreSize: cellMeta ? cellMeta.moreSize : 0,
+        totalSize: cellMeta ? cellMeta.totalSize : 0,
+        complete: cellMeta ? cellMeta.complete : true,
+        error: cellMeta ? cellMeta.error : false,
+        mask: cellMeta ? cellMeta.mask : false
       });
     },
     generateRowInsert(row) {
       const { dsType } = this.tab;
-      const { columnList, columnType, resource } = this.selectedTab;
-      const tableName = this.currentTableName || resource || 'my_table';
+      const { columnList, columnType } = this.selectedTab;
+      const tableName = this.currentTableName || 'my_table';
       this.currentTableName = tableName;
       let keyStr = '';
       const qualifier = this.getQualifier(dsType);
@@ -1116,7 +1173,7 @@ export default {
         }
       });
 
-      console.log(`INSERT INTO ${left}${tableName}${right} (${keyStr}) VALUES (${valueStr})`);
+      appLogger.debug(`INSERT INTO ${left}${tableName}${right} (${keyStr}) VALUES (${valueStr})`);
 
       return `INSERT INTO ${left}${tableName}${right} (${keyStr}) VALUES (${valueStr})`;
     },
@@ -1271,7 +1328,7 @@ export default {
             tab.rowSetCache[page] = rowSet; // Save raw data from the current page
           }
         } catch (error) {
-          console.error('获取分页数据失败:', error);
+          appLogger.error('获取分页数据失败:', error);
           this.$Message.error(this.$t('huo-qu-fen-ye-shu-ju-shi-bai'));
         }
       } else if (receiveMode === 'STREAM') {
@@ -1321,7 +1378,7 @@ export default {
     },
     resetInsertOption() {
       const columns = Array.isArray(this.selectedTab?.columnList) ? this.selectedTab.columnList : [];
-      const tableName = this.selectedTab?.resource || 'table_name';
+      const tableName = 'table_name';
 
       let offset = 0;
       let limit = -1;
@@ -1435,7 +1492,7 @@ export default {
           throw new Error(res.message);
         }
       } catch (error) {
-        console.error('err:', error);
+        appLogger.error('err:', error);
       }
     },
     async confirmExportOption() {
@@ -1512,7 +1569,7 @@ export default {
           throw new Error(res.message);
         }
       } catch (error) {
-        console.error('err:', error);
+        appLogger.error('err:', error);
       }
     },
     async downloadExportedFile() {
@@ -1542,7 +1599,7 @@ export default {
           const disposition = typeof dispositionRaw === 'string' ? dispositionRaw.trim() : '';
           fileName = disposition.split('filename=')[1];
         } catch (e) {
-          console.log(e);
+          appLogger.debug(e);
         }
 
         const url = window.URL.createObjectURL(blob);
@@ -1554,7 +1611,7 @@ export default {
         a.remove();
         window.URL.revokeObjectURL(url);
       } catch (error) {
-        console.error('err:', error);
+        appLogger.error('err:', error);
         if (this.selectedTab.exportState) {
           // this.selectedTab.exportState.exporting = false;
         }
@@ -1659,19 +1716,81 @@ export default {
 
   .tab-group {
     display: flex;
+    height: 44px;
+    flex: 0 0 44px;
     width: 100%;
+    background: var(--bg-secondary);
 
     .right {
       flex: 1;
       min-width: 0;
     }
 
+    .message-tabs {
+      flex: 1;
+      min-width: 0;
+
+      &--with-results {
+        flex: 0 0 auto;
+      }
+
+      :deep(.ant-tabs-nav-operations) {
+        display: none;
+      }
+    }
+
+    :deep(.ant-tabs) {
+      height: 44px;
+    }
+
     :deep(.ant-tabs-top > .ant-tabs-nav) {
+      height: 44px;
       margin: 0;
+    }
+
+    :deep(.ant-tabs-nav-list) {
+      min-height: 44px;
+      align-items: stretch;
+      padding-top: 0;
+      box-sizing: border-box;
     }
 
     :deep(.ant-tabs-nav-more) {
       display: none;
+    }
+
+    :deep(.ant-tabs-nav-wrap) {
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    :deep(.ant-tabs-tab) {
+      height: 44px;
+      align-items: center;
+      margin: 0 !important;
+      padding: 0 8px !important;
+      border-top: 0 !important;
+      border-left: 0 !important;
+      border-color: var(--border-primary) !important;
+      border-radius: 0 !important;
+      background: var(--bg-tertiary) !important;
+      color: var(--text-secondary) !important;
+
+      &:hover {
+        color: var(--primary-color) !important;
+      }
+    }
+
+    :deep(.ant-tabs-tab-active) {
+      border-bottom-color: var(--bg-primary) !important;
+      background: var(--bg-primary) !important;
+      color: var(--text-primary) !important;
+    }
+
+    :deep(.ant-tabs-extra-content) {
+      height: 44px;
+      line-height: 44px;
+      border-bottom: 1px solid var(--border-primary);
+      padding-right: 8px;
     }
   }
 
@@ -1726,7 +1845,6 @@ export default {
       }
 
       :deep(.ant-table-thead > tr > th .header-cell-content) {
-        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -1742,10 +1860,10 @@ export default {
 
         .resize-handle {
           position: absolute;
-          right: 0;
+          right: -2px;
           top: 0;
           bottom: 0;
-          width: 4px;
+          width: 5px;
           cursor: col-resize;
           z-index: 10;
           background: transparent;
@@ -1753,12 +1871,91 @@ export default {
       }
 
       :deep(.ant-table-tbody > tr > td) {
-        padding: 2px 8px;
+        padding: 0;
+        position: relative;
+      }
+
+      :deep(.ant-table-tbody .ant-table-cell) {
+        padding: 0 !important;
+      }
+
+      :deep(.ant-table-tbody .ant-table-cell:hover) .vxe-input-tpl .op {
+        display: flex;
+        align-items: center;
+      }
+
+      .vxe-input-tpl {
+        position: relative;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        min-height: 24px;
+        height: auto;
+        padding: 3px 8px;
+        box-sizing: border-box;
+
+        pre {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .op {
+          display: none;
+          position: absolute;
+          right: 4px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: rgba(255, 255, 255, 0.95);
+          padding: 2px 4px;
+          border-radius: 3px;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+          div {
+            display: inline-block;
+            cursor: pointer;
+            padding: 2px;
+            transition: all 0.2s;
+
+            &:hover {
+              opacity: 0.7;
+            }
+          }
+        }
       }
 
       // Remove blank lines.
       :deep(.ant-table-placeholder) {
         display: none;
+      }
+    }
+
+    .result-set-style--empty {
+      height: 100%;
+
+      :deep(.ant-spin-nested-loading),
+      :deep(.ant-spin-container),
+      :deep(.ant-table),
+      :deep(.ant-table-container) {
+        height: 100%;
+        min-height: 0;
+      }
+
+      :deep(.ant-table-container) {
+        display: flex;
+        flex-direction: column;
+      }
+
+      :deep(.ant-table-header) {
+        flex: none;
+      }
+
+      :deep(.ant-table-body) {
+        flex: 1;
+        min-height: 0;
+        overflow-x: auto !important;
       }
     }
 
@@ -1781,47 +1978,67 @@ export default {
   }
 
   .result-info-container {
-    overflow-y: scroll;
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
     width: 100%;
+    background: var(--bg-primary);
 
     .result-info-messages {
-      width: calc(100% - 28px);
-      min-height: 100%;
-      display: inline-block;
-      border-right: #c0c4cc solid 1px;
-      margin-left: 3px;
-      padding-top: 3px;
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      border-right: 1px solid var(--border-primary);
+      padding: 7px 10px 12px;
 
       .result-info {
-        margin-bottom: 1px;
-        font-weight: bold;
-        font-size: 12px;
+        margin-bottom: 2px;
+        font-weight: 400;
+        font-size: 14px;
+        line-height: 21px;
 
         .info {
           display: flex;
+          align-items: flex-start;
+          min-width: 0;
 
           .level {
-            border-radius: 1px;
-            height: 18px;
-            margin-right: 3px;
-            color: #19be6b;
+            flex: 0 0 auto;
+            margin-right: 6px;
+            color: #183995;
+            white-space: pre;
           }
 
           .time {
-            margin-right: 5px;
-            color: #aaa;
+            flex: 0 0 auto;
+            margin-right: 8px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+          }
+
+          &.info--warn .time {
+            color: #ad6800;
+          }
+
+          &.info--error .time {
+            color: #a8071a;
           }
 
           .message {
             flex: 1;
+            min-width: 0;
+            color: var(--text-primary);
             word-break: break-all;
 
-            &.Warn {
-              color: #f90;
+            &.Warn,
+            &.warn {
+              color: #ad6800;
             }
 
-            &.Error {
-              color: #ed4014;
+            &.Error,
+            &.error {
+              color: #a8071a;
             }
           }
         }
@@ -1829,24 +2046,31 @@ export default {
     }
 
     .result-info-buttons {
-      width: 24px;
-      display: inline-block;
-      vertical-align: top;
+      flex: 0 0 44px;
+      height: 100%;
+      padding-top: 8px;
+      display: flex;
+      justify-content: center;
+      box-sizing: border-box;
 
       .btn-group {
-        position: fixed;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
 
         .btn-group-item {
-          padding: 0 2px;
-          margin: 2px 2px;
-          display: block;
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--text-secondary);
+          border-radius: 6px;
         }
 
-        :deep(.btn-group-item-hover),
+        .btn-group-item--active,
         .btn-group-item:hover {
-          vertical-align: middle;
-          background: #e4e4e4;
-          border-radius: 3%;
+          background: var(--bg-tertiary);
           cursor: pointer;
         }
       }
@@ -2178,10 +2402,30 @@ export default {
     background: rgba(0, 0, 0, 0.9);
   }
 }
+
+:global([data-theme='dark']) {
+  .result-container .result-info-container .result-info-messages .result-info .info {
+    .level {
+      color: #9cdcfe;
+    }
+
+    .message.Warn,
+    .message.warn,
+    &.info--warn .time {
+      color: #dcdcaa;
+    }
+
+    .message.Error,
+    .message.error,
+    &.info--error .time {
+      color: #f48771;
+    }
+  }
+}
 :deep(.ant-table .ant-table-tbody tr td) {
   padding: 0 !important;
 }
 :deep(.ant-table-tbody .ant-table-cell) {
-  padding: 3px !important;
+  padding: 0 !important;
 }
 </style>

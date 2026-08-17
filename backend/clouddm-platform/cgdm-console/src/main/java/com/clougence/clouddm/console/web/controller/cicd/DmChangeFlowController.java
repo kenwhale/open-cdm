@@ -15,7 +15,9 @@
  */
 package com.clougence.clouddm.console.web.controller.cicd;
 
+import static com.clougence.clouddm.platform.dal.model.monitor.SecurityLevel.HIGH;
 import static com.clougence.clouddm.sdk.security.auth.def.SecRoleAuthLabel.DM_CICD_FLOW_MANAGE;
+import static com.clougence.clouddm.sdk.security.auth.def.SecRoleAuthLabel.DM_CICD_FLOW_OPERATE;
 import static com.clougence.clouddm.sdk.security.auth.def.SecRoleAuthLabel.DM_CICD_FLOW_READ;
 
 import java.util.*;
@@ -26,7 +28,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.clougence.clouddm.api.common.exception.ErrorMessageException;
 import com.clougence.clouddm.api.common.rpc.ResWebData;
 import com.clougence.clouddm.api.common.rpc.ResWebDataUtils;
@@ -38,6 +39,7 @@ import com.clougence.clouddm.console.web.global.i18n.I18nDmMsgKeys;
 import com.clougence.clouddm.console.web.global.jwtsession.RequestAuth;
 import com.clougence.clouddm.console.web.model.fo.browse.BrowseLevelsFO;
 import com.clougence.clouddm.console.web.model.fo.cicd.*;
+import com.clougence.clouddm.console.web.model.vo.DmPageVO;
 import com.clougence.clouddm.console.web.model.vo.browse.BrowseLevelsVO;
 import com.clougence.clouddm.console.web.model.vo.cicd.*;
 import com.clougence.clouddm.console.web.service.auth.RdpUserService;
@@ -46,15 +48,13 @@ import com.clougence.clouddm.console.web.service.cicd.DmChangeFlowService;
 import com.clougence.clouddm.console.web.service.cicd.DmChangeService;
 import com.clougence.clouddm.console.web.service.cicd.DmImService;
 import com.clougence.clouddm.console.web.service.cicd.DmScmService;
-import com.clougence.clouddm.console.web.service.cicd.domain.DmBranchDef;
-import com.clougence.clouddm.console.web.service.cicd.domain.DmImDef;
-import com.clougence.clouddm.console.web.service.cicd.domain.DmRepoDef;
-import com.clougence.clouddm.console.web.service.cicd.domain.DmScmDef;
+import com.clougence.clouddm.console.web.service.cicd.domain.*;
 import com.clougence.clouddm.console.web.util.DmConvertUtils;
 import com.clougence.clouddm.platform.dal.access.AuthDal;
 import com.clougence.clouddm.platform.dal.access.ChangeFlowDal;
 import com.clougence.clouddm.platform.dal.access.DataSourceDal;
 import com.clougence.clouddm.platform.dal.access.ObjectCacheDao;
+import com.clougence.clouddm.platform.dal.access.entry.UserCacheEntry;
 import com.clougence.clouddm.platform.dal.model.auth.DmAuthUserDO;
 import com.clougence.clouddm.platform.dal.model.auth.RsAuthPersonObj;
 import com.clougence.clouddm.platform.dal.model.cicd.*;
@@ -207,7 +207,7 @@ public class DmChangeFlowController {
     public ResWebData<?> flowList(HttpServletRequest request, @Valid @RequestBody ChangeFlowListFO fo) {
         String puid = (String) request.getAttribute(RdpUserService.PUID);
 
-        IPage<ChangeFlowVO> result = this.changeFlowService.queryChangeFlowListByPage(puid, fo);
+        DmPageVO<ChangeFlowVO> result = this.changeFlowService.queryChangeFlowListByPage(puid, fo);
         return ResWebDataUtils.buildSuccess(result);
     }
 
@@ -221,18 +221,48 @@ public class DmChangeFlowController {
         return ResWebDataUtils.buildSuccess(vo);
     }
 
+    @RequestAuth(DM_CICD_FLOW_MANAGE)
+    @RequestMapping(value = "/batchCreate", method = RequestMethod.POST)
+    public ResWebData<?> flowBatchCreate(HttpServletRequest request, @Valid @RequestBody GuideBatchCreateFO fo) {
+        String puid = (String) request.getAttribute(RdpUserService.PUID);
+        String uid = (String) request.getAttribute(RdpUserService.UID);
+
+        return ResWebDataUtils.buildSuccess(this.changeFlowService.createChangeFlows(puid, uid, fo));
+    }
+
     @RequestAuth(DM_CICD_FLOW_READ)
     @RequestMapping(value = "/detail", method = RequestMethod.POST)
     public ResWebData<?> flowDetail(HttpServletRequest request, @Valid @RequestBody ChangeFlowRequestFO fo) {
         String puid = (String) request.getAttribute(RdpUserService.PUID);
-        String uid = (String) request.getAttribute(RdpUserService.UID);
-
-        DmChangeFlowDO data = this.changeFlowService.queryFlowById(puid, fo.getFlowId());
-        if (data == null) {
-            return ResWebDataUtils.buildSuccess(data);
-        } else {
-            return ResWebDataUtils.buildSuccess(DmConvertUtils.convertToChangeFlowVO(data, this.objectCacheDao));
+        ChangeFlowVO vo = this.changeFlowService.queryChangeFlowDetail(puid, fo.getFlowId());
+        if (vo != null) {
+            vo.setCascadeRunning(this.changeFlowDal.batchMapper().countRunningByRootFlow(puid, fo.getFlowId()) > 0);
         }
+        return ResWebDataUtils.buildSuccess(vo);
+    }
+
+    @RequestAuth(DM_CICD_FLOW_MANAGE)
+    @RequestMapping(value = "/parentCandidates", method = RequestMethod.POST)
+    public ResWebData<?> parentCandidates(HttpServletRequest request, @RequestBody(required = false) ChangeFlowRequestFO fo) {
+        String puid = (String) request.getAttribute(RdpUserService.PUID);
+        Long excludeFlowId = fo == null || fo.getFlowId() <= 0 ? null : fo.getFlowId();
+        return ResWebDataUtils.buildSuccess(this.changeFlowService.queryParentCandidates(puid, excludeFlowId));
+    }
+
+    @RequestAuth(DM_CICD_FLOW_MANAGE)
+    @RequestMapping(value = "/parentConfig", method = RequestMethod.POST)
+    public ResWebData<?> parentConfig(HttpServletRequest request, @Valid @RequestBody ChangeFlowParentConfigFO fo) {
+        String puid = (String) request.getAttribute(RdpUserService.PUID);
+        this.changeFlowService.updateParent(puid, fo.getFlowId(), fo.getParentFlowId());
+        return ResWebDataUtils.buildSuccess(true);
+    }
+
+    @RequestAuth(DM_CICD_FLOW_MANAGE)
+    @RequestMapping(value = "/parentBatchConfig", method = RequestMethod.POST)
+    public ResWebData<?> parentBatchConfig(HttpServletRequest request, @Valid @RequestBody ChangeFlowParentBatchConfigFO fo) {
+        String puid = (String) request.getAttribute(RdpUserService.PUID);
+        this.changeFlowService.updateParents(puid, fo.getChanges());
+        return ResWebDataUtils.buildSuccess(true);
     }
 
     @RequestAuth(DM_CICD_FLOW_MANAGE)
@@ -268,7 +298,7 @@ public class DmChangeFlowController {
 
         // fetch scm
         Map<Long, DmGitOpsScmDO> scmMap = new HashMap<>();
-        Set<Long> scmIds = data.stream().map(DmChangeFlowDO::getRefScmId).collect(Collectors.toSet());
+        Set<Long> scmIds = data.stream().map(DmChangeFlowDO::getRefScmId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (!scmIds.isEmpty()) {
             List<DmGitOpsScmDO> scmList = this.changeFlowDal.scmMapper().queryListByOwnerAndIds(puid, new ArrayList<>(scmIds));
             scmList.forEach(ds -> scmMap.put(ds.getId(), ds));
@@ -311,23 +341,13 @@ public class DmChangeFlowController {
     }
 
     @RequestAuth(DM_CICD_FLOW_MANAGE)
-    @RequestMapping(value = "/pushFlowConfig", method = RequestMethod.POST)
-    public ResWebData<?> flowPushConfig(HttpServletRequest request, @Valid @RequestBody ChangeFlowConfigFO fo) {
-        String puid = (String) request.getAttribute(RdpUserService.PUID);
-        String uid = (String) request.getAttribute(RdpUserService.UID);
-
-        this.changeFlowService.updateFlowConfigByFlowId(puid, fo.getFlowId(), fo);
-        return ResWebDataUtils.buildSuccess();
-    }
-
-    @RequestAuth(DM_CICD_FLOW_MANAGE)
     @RequestMapping(value = "/gitOpsCreate", method = RequestMethod.POST)
     public ResWebData<?> flowGitOpsCreate(HttpServletRequest request, @Valid @RequestBody ChangeFlowGitOpsCreateFO fo) {
         String puid = (String) request.getAttribute(RdpUserService.PUID);
         String uid = (String) request.getAttribute(RdpUserService.UID);
 
-        long newConfigId = this.changeFlowService.createGitOpsFlow(puid, fo.getFlowId(), fo);
-        return ResWebDataUtils.buildSuccess(newConfigId);
+        GuideCreateChangeFlowVO result = this.changeFlowService.createGitOpsFlow(puid, fo.getFlowId(), fo);
+        return ResWebDataUtils.buildSuccess(result);
     }
 
     @RequestAuth(DM_CICD_FLOW_MANAGE)
@@ -359,7 +379,7 @@ public class DmChangeFlowController {
         String puid = (String) request.getAttribute(RdpUserService.PUID);
 
         if (fo.isUpdateHook()) {
-            this.changeFlowService.configGitOpsWebhook(puid, fo.getFlowId(), fo.isHookEnable());
+            this.changeFlowService.configGitOpsWebhook(puid, fo.getFlowId(), fo.isHookEnable(), fo.getHookSigningToken(), fo.isClearHookSigningToken());
         }
         if (fo.isUpdateTrigger()) {
             this.changeFlowService.configGitOpsTrigger(puid, fo.getFlowId(), fo.isTriggerEnable());
@@ -419,34 +439,63 @@ public class DmChangeFlowController {
         return ResWebDataUtils.buildSuccess(true);
     }
 
-    @RequestAuth(DM_CICD_FLOW_MANAGE)
+    @RequestAuth(level = HIGH, value = DM_CICD_FLOW_OPERATE)
     @RequestMapping(value = "/triggerChange", method = RequestMethod.POST)
     public ResWebData<?> flowTriggerChange(HttpServletRequest request, @Valid @RequestBody ChangeFlowTriggerFO fo) {
         String puid = (String) request.getAttribute(RdpUserService.PUID);
         String uid = (String) request.getAttribute(RdpUserService.UID);
 
-        this.dmChangeService.verifyFlow(puid, fo.getFlowId());
         DmChangeFlowDO gitOpsFlowDO = this.changeFlowDal.flowMapper().queryByOwnerAndId(puid, fo.getFlowId());
-        DmBranchDef branch = this.dmScmService
-            .fetchBranchByScmAndRepo(gitOpsFlowDO.getOwnerUid(), gitOpsFlowDO.getRefScmId(), gitOpsFlowDO.getScmRepoName(), gitOpsFlowDO.getScmRepoBranch());
+        verifyManualTriggerFlow(gitOpsFlowDO);
+        if (gitOpsFlowDO.getFlowType() == ChangeFlowType.BUILT_IN) {
+            this.dmChangeService.triggerBuiltInChange(puid, uid, gitOpsFlowDO.getId(), fo.getSql());
+            return ResWebDataUtils.buildSuccess(true);
+        }
+        DmBranchDef branch = this.dmScmService.fetchBranchByScmAndRepo( //
+                gitOpsFlowDO.getOwnerUid(), //
+                gitOpsFlowDO.getRefScmId(), //
+                gitOpsFlowDO.getScmRepoIdentifier(), //
+                gitOpsFlowDO.getScmRepoSpace(), //
+                gitOpsFlowDO.getScmRepoName(), //
+                gitOpsFlowDO.getScmRepoBranch());
         if (branch == null) {
             return ResWebDataUtils.buildError(DmI18nUtils.getMessage(I18nDmMsgKeys.DEVOPS_BRANCH_NOT_EXIST_ERROR.name()));
         }
 
         // create
-        return this.dmChangeService.triggerChangeSuggest(puid, gitOpsFlowDO.getId(), branch.getBranchCommitId());
+        return this.dmChangeService.triggerChangeSuggest(puid, gitOpsFlowDO.getId(), ChangeTriggerContext.manual(branch.getBranchCommitId(), uid));
     }
 
-    @RequestAuth(DM_CICD_FLOW_MANAGE)
+    private ChangeFlowRelationItemVO toRelationItem(DmChangeFlowDO flow) {
+        ChangeFlowRelationItemVO vo = new ChangeFlowRelationItemVO();
+        vo.setFlowId(flow.getId());
+        vo.setFlowName(flow.getFlowName());
+        vo.setFlowType(flow.getFlowType() == null ? ChangeFlowType.SCM : flow.getFlowType());
+        vo.setDsType(flow.getDsType());
+        vo.setFlowManagerUid(flow.getFlowManagerUid());
+        UserCacheEntry manager = this.objectCacheDao.queryByUid(flow.getFlowManagerUid());
+        vo.setFlowManagerName(manager == null ? "UID:" + flow.getFlowManagerUid() : manager.getUserName());
+        vo.setSelectable(true);
+        return vo;
+    }
+
+    @RequestAuth(level = HIGH, value = DM_CICD_FLOW_OPERATE)
     @RequestMapping(value = "/triggerSnapshot", method = RequestMethod.POST)
     public ResWebData<?> flowTriggerSnapshot(HttpServletRequest request, @Valid @RequestBody ChangeFlowTriggerFO fo) {
         String puid = (String) request.getAttribute(RdpUserService.PUID);
         String uid = (String) request.getAttribute(RdpUserService.UID);
 
-        this.dmChangeService.verifyFlow(puid, fo.getFlowId());
         DmChangeFlowDO gitOpsFlowDO = this.changeFlowDal.flowMapper().queryByOwnerAndId(puid, fo.getFlowId());
-        DmBranchDef branch = this.dmScmService
-            .fetchBranchByScmAndRepo(gitOpsFlowDO.getOwnerUid(), gitOpsFlowDO.getRefScmId(), gitOpsFlowDO.getScmRepoName(), gitOpsFlowDO.getScmRepoBranch());
+        verifyManualTriggerFlow(gitOpsFlowDO);
+        if (gitOpsFlowDO.getFlowType() == ChangeFlowType.BUILT_IN) {
+            throw new ErrorMessageException(DmI18nUtils.getMessage(I18nDmMsgKeys.CICD_FLOW_BUILT_IN_TRIGGER_ERROR.name()));
+        }
+        DmBranchDef branch = this.dmScmService.fetchBranchByScmAndRepo(gitOpsFlowDO.getOwnerUid(),//
+                gitOpsFlowDO.getRefScmId(),//
+                gitOpsFlowDO.getScmRepoIdentifier(),//
+                gitOpsFlowDO.getScmRepoSpace(),//
+                gitOpsFlowDO.getScmRepoName(),//
+                gitOpsFlowDO.getScmRepoBranch());
         if (branch == null) {
             return ResWebDataUtils.buildError(DmI18nUtils.getMessage(I18nDmMsgKeys.DEVOPS_BRANCH_NOT_EXIST_ERROR.name()));
         }
@@ -469,8 +518,19 @@ public class DmChangeFlowController {
         changeDO.setTryTimes(0);
         changeDO.setLastCommitId(branch.getBranchCommitId());
         changeDO.setLockStatus(true);
-        changeDO.setFlowWalked(new RsChangeFlowWalkedObj());
         this.changeFlowDal.changeMapper().insert(changeDO);
         return ResWebDataUtils.buildSuccess(true);
+    }
+
+    private void verifyManualTriggerFlow(DmChangeFlowDO flow) {
+        if (flow == null || flow.isDeleted()) {
+            throw new ErrorMessageException(DmI18nUtils.getMessage(I18nDmMsgKeys.CICD_FLOW_NOT_EXIST_ERROR.name()));
+        }
+        if (flow.getChangeFlowStatus() != ChangeFlowStatus.NORMAL) {
+            throw new ErrorMessageException(DmI18nUtils.getMessage(I18nDmMsgKeys.CICD_FLOW_IS_ARCHIVE_OR_DELETE_ERROR.name()));
+        }
+        if (!flow.isEnable()) {
+            throw new ErrorMessageException(DmI18nUtils.getMessage(I18nDmMsgKeys.DEVOPS_IS_DISABLED_ERROR.name()));
+        }
     }
 }

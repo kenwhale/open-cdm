@@ -18,10 +18,9 @@ package com.clougence.clouddm.console.web.service.approval;
 import java.util.List;
 import java.util.Map;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.clougence.clouddm.console.web.model.fo.security.ListMyAuthTicketFO;
 import com.clougence.clouddm.console.web.model.fo.ticket.*;
 import com.clougence.clouddm.console.web.model.vo.DmBizLogVO;
+import com.clougence.clouddm.console.web.model.vo.DmPageVO;
 import com.clougence.clouddm.console.web.model.vo.RdpApproTemplateVO;
 import com.clougence.clouddm.console.web.model.vo.ticket.*;
 import com.clougence.clouddm.platform.dal.model.approval.ApprovalType;
@@ -38,7 +37,9 @@ public interface ApprovalControlService {
 
     DmTicketResultVO createSqlTicket(String puid, String uid, DmAddTicketFO fo);
 
-    void confirmTicket(String puid, long ticketId, DmConfirmTicketFO fo);
+    String confirmTicket(String puid, long ticketId, DmConfirmTicketFO fo);
+
+    void createAuthTicket(String ownerUid, String uid, RdpAddAuthTicketFO fo);
 
     void retryJob(String puid, String uid, long ticketId);
 
@@ -50,13 +51,11 @@ public interface ApprovalControlService {
 
     void endAutoExecJob(String puid, String uid, long ticketId);
 
-    void createAuthTicket(String ownerUid, String uid, RdpAddAuthTicketFO fo);
-
     //
     // query
     //
 
-    IPage<RdpTicketBasicVO> queryTicketListByPage(String puid, RdpListTicketFO fo);
+    DmPageVO<RdpTicketBasicVO> queryTicketListByPage(String puid, RdpListTicketFO fo);
 
     /**
      * 一段时间内工单按数据源(数据库)汇总。
@@ -76,11 +75,11 @@ public interface ApprovalControlService {
      */
     String exportTicketSql(String puid, RdpListTicketFO fo);
 
-    IPage<RdpTicketBasicVO> queryAuthTicketListByPage(String puid, ListMyAuthTicketFO fo);
-
     RdpTicketBaseInfoVO queryTicketBaseInfo(String puid, String uid, RdpQueryTicketDetailFO fo);
 
-    DmQueryTicketVO queryQueryTicketDetail(String puid, DmQueryTicketDetailFO fo);
+    DmQueryTicketVO queryTicketDetail(String puid, DmQueryTicketDetailFO fo);
+
+    DmApprovalSqlPreviewVO previewSqlFile(long approvalId, int startLine, int lineCount);
 
     RdpAuthTicketDetailVO queryAuthTicketDetail(String ownerUid, String uid, long ticketId);
 
@@ -88,7 +87,9 @@ public interface ApprovalControlService {
 
     DmPageVO<DmAutoExecTaskVO> queryExecTaskList(String puid, String uid, DmQueryTaskListFO fo);
 
-    List<DmBizLogVO> queryExecLog(String puid, DmQueryExecLogFO fo);
+    String queryExecTaskSql(String puid, String uid, DmQueryAutoExecFO fo);
+
+    List<DmBizLogVO> queryExecLog(DmQueryExecLogFO  fo);
 
     List<RdpApproTemplateVO> listTemplates(String ownerUid, ApprovalType approvalType);
 

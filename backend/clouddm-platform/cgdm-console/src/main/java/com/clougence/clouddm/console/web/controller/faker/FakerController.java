@@ -38,12 +38,12 @@ import com.clougence.clouddm.console.web.model.fo.faker.*;
 import com.clougence.clouddm.console.web.model.vo.faker.FakerDefVO;
 import com.clougence.clouddm.console.web.model.vo.faker.FakerLogVO;
 import com.clougence.clouddm.console.web.model.vo.faker.FakerPreviewVO;
-import com.clougence.clouddm.console.web.service.asyntask.AsyncTaskService;
+import com.clougence.clouddm.console.web.service.asyntask.AsyncTaskServiceService;
 import com.clougence.clouddm.console.web.service.auth.RdpUserService;
 import com.clougence.clouddm.console.web.service.faker.FakerService;
+import com.clougence.clouddm.console.web.util.DsResPathObj;
 import com.clougence.clouddm.console.web.util.RdpAuthUtils;
 import com.clougence.clouddm.platform.dal.access.ObjectCacheDao;
-import com.clougence.clouddm.sdk.model.analysis.resource.DsResPathObj;
 import com.clougence.clouddm.sdk.security.auth.AuthKind;
 import com.clougence.clouddm.sdk.security.auth.def.SecDataAuthLabel;
 import com.clougence.clouddm.sdk.ui.faker.FakerUiData;
@@ -60,15 +60,15 @@ import lombok.extern.slf4j.Slf4j;
 public class FakerController {
 
     @Resource
-    private FakerService        fakerService;
+    private FakerService            fakerService;
     @Resource
-    private AsyncTaskService    asyncTaskService;
+    private AsyncTaskServiceService asyncTaskService;
     @Resource
-    private DmDsConfigService   dmDsConfigService;
+    private DmDsConfigService       dmDsConfigService;
     @Resource
-    private ObjectCacheDao      objectCacheDao;
+    private ObjectCacheDao          objectCacheDao;
     @Resource
-    private DmAuthServiceForBiz dmAuthServiceForBiz;
+    private DmAuthServiceForBiz     dmAuthServiceForBiz;
 
     @RequestAuth(DM_QUERY_CONSOLE)
     @RequestMapping(value = "/fakerDef", method = RequestMethod.POST)

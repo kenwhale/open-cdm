@@ -90,6 +90,7 @@
 </template>
 
 <script>
+import appLogger from '@/utils/logger';
 import { mapGetters, mapState } from 'vuex';
 import AppSidebar from '@/components/layout/AppSidebar';
 import AppBrandLogo from '@/components/layout/AppBrandLogo';
@@ -182,7 +183,7 @@ export default {
       }
     });
     this.$bus.on('showCellDetailModal', async (data) => {
-      console.log('showCellDetailModal', data);
+      appLogger.debug('showCellDetailModal', data);
       if (!this.showDetailModal) {
         this.showDetailModal = true;
         this.selectedCellDetail = {
@@ -225,7 +226,7 @@ export default {
   },
   methods: {
     handleShowInactiveModal(msg) {
-      console.log(msg);
+      appLogger.debug(msg);
       this.showInactiveModal = true;
       this.inactiveMsg = msg;
     },
@@ -259,27 +260,6 @@ export default {
         }
       }
     },
-    /* eslint-disable */
-    setupBaiduTongji() {
-      var _hmt = _hmt || [];
-      _hmt.push([
-        '_requirePlugin',
-        'UrlChangeTracker',
-        {
-          shouldTrackUrlChange: function (newPath, oldPath) {
-            return newPath && oldPath;
-          }
-        }
-      ]);
-      window._hmt = _hmt; // Change to Window Global Variable
-      (function () {
-        var hm = document.createElement('script');
-        hm.src = 'https://hm.baidu.com/hm.js?b86e2e73fd7517d78d5ccdf0cd12384c'; //Please replace your station.
-        var s = document.getElementsByTagName('script')[0];
-        s.parentNode.insertBefore(hm, s);
-      })();
-    },
-    /* eslint-enable */
     handleDetailCopy() {
       if (XEClipboard.copy(this.cellDetailContent)) {
         this.$Message.success(this.$t('fu-zhi-cheng-gong'));
@@ -318,7 +298,7 @@ export default {
       const { resultId, rowNumber, colNumber } = this.selectedCellDetail;
 
       if (!resultId || rowNumber < 0 || colNumber < 0) {
-        console.error('缺少必要参数:', { resultId, rowNumber, colNumber });
+        appLogger.error('缺少必要参数:', { resultId, rowNumber, colNumber });
         return;
       }
 
@@ -363,7 +343,7 @@ export default {
           this.$Message.error(res.message || this.$t('jia-zai-shu-ju-shi-bai'));
         }
       } catch (error) {
-        console.error('加载单元格数据失败:', error);
+        appLogger.error('加载单元格数据失败:', error);
         this.$Message.error(this.$t('jia-zai-shu-ju-shi-bai'));
       } finally {
         this.cellDetailLoading = false;

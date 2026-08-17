@@ -19,8 +19,6 @@ import java.time.LocalDateTime;
 import java.util.Date;
 
 import com.baomidou.mybatisplus.annotation.*;
-import com.clougence.clouddm.platform.dal.model.execution.AutoExecTaskStatus;
-import com.clougence.clouddm.sdk.security.auth.SecQueryType;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -32,22 +30,18 @@ public class DmExecAutoTaskDO {
 
     @TableId(type = IdType.AUTO)
     private Long               id;
-
     @TableField(insertStrategy = FieldStrategy.NOT_NULL, updateStrategy = FieldStrategy.NOT_NULL)
     private LocalDateTime      gmtCreate;
-
     @TableField(insertStrategy = FieldStrategy.NOT_NULL, updateStrategy = FieldStrategy.NOT_NULL)
     private LocalDateTime      gmtModified;
-
     private Long               autoExecJobId;
     private String             bizId;
+    private String             queryId;
     private Integer            execOrder;
     private String             execSql;
     private AutoExecTaskStatus status;
     private Long               affectRow;
-    private SecQueryType       sqlType;
     private Integer            execCount;
-
     private Date               gmtLastStart;
     private Date               gmtLastEnd;
 

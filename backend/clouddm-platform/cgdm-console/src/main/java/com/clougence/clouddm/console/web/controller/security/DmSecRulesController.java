@@ -18,6 +18,7 @@ package com.clougence.clouddm.console.web.controller.security;
 import static com.clougence.clouddm.sdk.security.auth.def.SecRoleAuthLabel.DM_SECRULES_MANAGE;
 import static com.clougence.clouddm.sdk.security.auth.def.SecRoleAuthLabel.DM_SECRULES_READ;
 
+import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.Collections;
 import java.util.HashMap;
@@ -49,6 +50,7 @@ import com.clougence.clouddm.platform.dal.model.secrule.DmSecSpecDO;
 import com.clougence.clouddm.platform.dal.model.system.DmSysEnvDO;
 import com.clougence.clouddm.sdk.model.env.EnvParamKeys;
 import com.clougence.clouddm.sdk.service.secrules.SecParam;
+import com.clougence.detectrule.parser.DetectRuleDslProvider;
 import com.clougence.dslpaser.antlr.AntlerSyntaxException;
 import com.clougence.dslpaser.antlr.DslHelper;
 import com.clougence.dslpaser.ast.StatementSet;
@@ -412,10 +414,10 @@ public class DmSecRulesController {
     public ResWebData<?> ruleFormat(@RequestBody @Valid RuleFormatFO fo, HttpServletRequest request) {
         String puid = (String) request.getAttribute(RdpUserService.PUID);
 
-        try {
+        try (StringReader reader = new StringReader(fo.getContent())) {
             checkDetectRuleScript(fo.getContent());
 
-            StatementSet statementSet = DslHelper.parserDsl("DetectRule", fo.getContent());
+            StatementSet statementSet = DslHelper.parserDsl(DetectRuleDslProvider.INSTANCE, reader);
 
             Map<String, String> fmtOptions = new HashMap<>(this.checkRulesService.getRuleScriptFormatByUid(puid));
 
@@ -445,7 +447,6 @@ public class DmSecRulesController {
     public ResWebData<?> ruleVerify(@RequestBody @Valid RuleVerifyFO fo, HttpServletRequest request) {
         try {
             checkDetectRuleScript(fo.getContent());
-            //StatementSet statementSet = DslHelper.parserDsl("DetectRule", );
 
             //            Map<String, String> fmtOptions = new HashMap<>(this.checkRulesService.getRuleScriptFormatByUid(puid));
             //            StringWriter writer = new StringWriter();
@@ -472,8 +473,8 @@ public class DmSecRulesController {
             throw new ErrorMessageException(DmI18nUtils.getMessage(I18nDmMsgKeys.CHECKRULES_RULE_SCRIPT_EMPTY_ERROR.name()));
         }
 
-        try {
-            StatementSet statementSet = DslHelper.parserDsl("DetectRule", scriptContent);
+        try (StringReader reader = new StringReader(scriptContent)) {
+            StatementSet statementSet = DslHelper.parserDsl(DetectRuleDslProvider.INSTANCE, reader);
             long codeLines = statementSet.getStatements().stream().filter(s -> {
                 return !s.getClass().getSimpleName().equals("DefineStatement");
             }).count();

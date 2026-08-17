@@ -19,6 +19,7 @@ import java.lang.reflect.Field;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,14 +51,18 @@ public class UserConfigServiceImpl implements UserConfigService {
 
     private static final int       DEFAULT_LANGUAGE_MAX_REQUESTS         = 8;
     private static final int       DEFAULT_LANGUAGE_MAX_REQUESTS_BY_USER = 4;
+    private static final int       DEFAULT_LANGUAGE_MAX_REQUEST_KB       = 1024;
+    private static final int       DEFAULT_SQL_FILE_MAX_SIZE             = 20;
+    private static final String    DEFAULT_LANGUAGE                      = "zh_CN";
 
     @Resource
     private SystemDal              systemDal;
     @Resource
     private AuthDal                authDal;
     @Resource
-    private ConsoleConfig rdpConfig;
+    private ConsoleConfig          rdpConfig;
     @Resource
+    @Lazy
     private List<RdpNotifyService> notifyServices;
 
     @Override
@@ -299,6 +304,24 @@ public class UserConfigServiceImpl implements UserConfigService {
         Integer value = this.systemDal.fetchUserConf(uid, RootUserConfig.Fields.languageMaxRequestsByUser, Integer.class, DEFAULT_LANGUAGE_MAX_REQUESTS_BY_USER);
         int userLimit = Math.max(1, value);
         return Math.min(systemLimit, userLimit);
+    }
+
+    @Override
+    public int languageMaxRequestKiloByte() {
+        int maxKiloByte = this.systemDal.fetchSystemConf(RootUserConfig.Fields.languageMaxRequestKiloByte, Integer.class, DEFAULT_LANGUAGE_MAX_REQUEST_KB);
+        return Math.max(64, Math.min(16384, maxKiloByte));
+    }
+
+    @Override
+    public String defaultLanguage() {
+        String language = this.systemDal.fetchSystemConf(RootUserConfig.Fields.defaultLanguage, String.class, DEFAULT_LANGUAGE);
+        return StringUtils.defaultIfBlank(language, DEFAULT_LANGUAGE);
+    }
+
+    @Override
+    public int sqlFileMaxSize() {
+        int maxSize = this.systemDal.fetchSystemConf(RootUserConfig.Fields.approvalSqlFileMaxMegaByte, Integer.class, DEFAULT_SQL_FILE_MAX_SIZE);
+        return Math.max(1, Math.min(DEFAULT_SQL_FILE_MAX_SIZE, maxSize));
     }
 
     @Override

@@ -47,6 +47,7 @@ public class MySqlDsFactory implements DsFactory<Connection> {
             return entry.getValue() == null || //
                    (StringUtils.isBlank(String.valueOf(entry.getValue())) && !StringUtils.equals("trustCertificateKeyStorePassword", String.valueOf(entry.getKey())));
         });
+        props.putIfAbsent("tinyInt1isBit", "false");
 
         String id = dsConfig.getProperty(DsConfigKeys.ID.getConfigKey());
         String username = dsConfig.getProperty(DsConfigKeys.USER.getConfigKey());
@@ -60,7 +61,6 @@ public class MySqlDsFactory implements DsFactory<Connection> {
         String tcpKeepAlive = dsConfig.getProperty(DsConfigKeys.TCP_KEEP_ALIVE.getConfigKey());
         String autoCommit = dsConfig.getProperty(DsConfigKeys.AUTO_COMMIT.getConfigKey());
 
-        String mySqlMode = dsConfig.getProperty(DsConfigKeys.MY_SQL_MODE.getConfigKey());
         String myMaxAllowedPacket = dsConfig.getProperty(DsConfigKeys.MY_MAX_ALLOWED_PACKET.getConfigKey());
 
         if (StringUtils.isNotBlank(username)) {
@@ -91,18 +91,6 @@ public class MySqlDsFactory implements DsFactory<Connection> {
 
             if (StringUtils.isNotBlank(autoCommit)) {
                 myConnect.setAutoCommit(!StringUtils.equalsIgnoreCase("false", autoCommit));
-            }
-            if (StringUtils.isNotBlank(mySqlMode)) {
-                if ("EMPTY".equalsIgnoreCase(mySqlMode)) {
-                    try (PreparedStatement ps = myConnect.prepareStatement("set sql_mode=''")) {
-                        ps.execute();
-                    }
-                } else {
-                    try (PreparedStatement ps = myConnect.prepareStatement("set sql_mode= ?")) {
-                        ps.setString(1, mySqlMode);
-                        ps.execute();
-                    }
-                }
             }
             if (StringUtils.isNotBlank(myMaxAllowedPacket)) {
                 try (PreparedStatement ps = myConnect.prepareStatement("set global max_allowed_packet= ?")) {

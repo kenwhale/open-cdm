@@ -15,15 +15,18 @@
  */
 package com.clougence.clouddm.dsfamily.language.split;
 
+import java.io.StringReader;
 import java.util.List;
+import java.util.stream.Stream;
 
 import com.clougence.clouddm.sdk.language.AbstractRequest;
 import com.clougence.clouddm.sdk.language.LanguageResult;
 import com.clougence.clouddm.sdk.language.split.SplitRequest;
 import com.clougence.clouddm.sdk.language.split.SplitResult;
 import com.clougence.clouddm.sdk.language.split.SplitSqlStatement;
-import com.clougence.clouddm.sdk.sql.split.SplitAnalysisSpi;
-import com.clougence.clouddm.sdk.sql.split.SplitScript;
+import com.clougence.clouddm.sdk.sql.SqlParserParameters;
+import com.clougence.clouddm.sdk.sql.parser.SplitAnalysisSpi;
+import com.clougence.clouddm.sdk.sql.parser.SplitScript;
 import com.clougence.dslpaser.ast.location.BlockLocation;
 import com.clougence.dslpaser.ast.location.CodeLocation;
 import com.clougence.utils.StringUtils;
@@ -37,12 +40,15 @@ public class SplitStrategyCenter {
         }
 
         List<SplitScript> scripts;
-        try {
-            SplitAnalysisSpi splitSpi = request.getSqlEngine().splitAnalysisSpi();
-            scripts = splitSpi.splitScript(request.getSqlText(), null, request.getBasicCodeLine(), request.getBasicCodeColumn());
+        try (StringReader reader = new StringReader(request.getSqlText())) {
+            SplitAnalysisSpi splitSpi = request.getSqlEngine().splitAnalysisSpi(new SqlParserParameters(request.getSqlParameters()));
+            try (Stream<SplitScript> stream = splitSpi.splitScriptStream(reader, null, request.getBasicCodeLine(), request.getBasicCodeColumn())) {
+                scripts = stream.toList();
+            }
         } catch (RuntimeException e) {
             return result;
         }
+
         for (SplitScript script : scripts) {
             SplitSqlStatement statement = new SplitSqlStatement();
             statement.setSql(script.getScript());

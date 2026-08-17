@@ -39,10 +39,11 @@ ext {
     HIKARICP_VERSION = globalConfig.getProperty("cg.lib.hikaricp.version")
     OKHTTP_VERSION = globalConfig.getProperty("cg.lib.okhttp.version")
     FASTJSON_VERSION = globalConfig.getProperty("cg.lib.fastjson.version")
+    GUAVA_VERSION = globalConfig.getProperty("cg.lib.guava.version")
 }
 
 group = 'com.cdmgr'
-version = globalConfig.getProperty("cg.clouddm.main.version")
+version = System.getenv("CG_CLOUDDM_MAIN_VERSION") ?: globalConfig.getProperty("cg.clouddm.main.version")
 
 dependencies {
     compileOnly "org.slf4j:slf4j-api:${SLF4J_VERSION}"

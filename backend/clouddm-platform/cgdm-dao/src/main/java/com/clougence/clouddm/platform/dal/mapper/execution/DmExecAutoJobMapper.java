@@ -36,9 +36,29 @@ public interface DmExecAutoJobMapper extends BaseMapper<DmExecAutoJobDO> {
 
     DmExecAutoJobDO queryByIdForUpdate(@Param("id") Long id);
 
+    int startJob(@Param("jobId") Long jobId, @Param("wsn") String wsn);
+
+    int startPreparedJob(@Param("jobId") Long jobId, @Param("uid") String uid);
+
+    int claimJobForPackaging(@Param("jobId") Long jobId);
+
+    int heartbeatPackaging(@Param("jobId") Long jobId);
+
     List<Long> listUnFinishJobIdList(@Param("time") Date date);
 
     int updateJobStatus(@Param("jobId") Long jobId, @Param("status") AutoExecJobStatus status);
+
+    int markJobFailedIfActive(@Param("jobId") Long jobId);
+
+    int finishJobIfActive(@Param("jobId") Long jobId);
+
+    /**
+     * Changes a non-terminal job to {@link AutoExecJobStatus#PAUSE} atomically.
+     *
+     * @return {@code 1} when this call changes the state; {@code 0} when the job is missing, already paused, or in
+     *         a terminal state
+     */
+    int pauseJobIfActive(@Param("jobId") Long jobId);
 
     void finishJob(@Param("jobId") Long jobId);
 

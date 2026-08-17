@@ -263,6 +263,7 @@ export default {
         } else if (this.position.type === 'tree-resize') {
           const ele = document.querySelector('.data-source-container');
           if (ele) {
+            ele.classList.add('data-source-container--resizing');
             const rect = ele.getBoundingClientRect();
             let calcWidth = rect.width;
 
@@ -298,11 +299,11 @@ export default {
             const rect = ele.getBoundingClientRect();
             let calcWidth = rect.width;
 
-            if (rect.width >= 60) {
+            if (rect.width >= 180) {
               calcWidth += leftWidth;
             }
-            if (calcWidth < 60) {
-              calcWidth = 60;
+            if (calcWidth < 180) {
+              calcWidth = 180;
               needMouseUp = true;
             }
 
@@ -318,6 +319,7 @@ export default {
     handleMouseup() {
       document.body.style.setProperty('user-select', 'text');
       this.position.canResize = false;
+      document.querySelector('.data-source-container')?.classList.remove('data-source-container--resizing');
       if (this.position.ele) {
         this.position.ele.style.background = 'rgba(0, 0, 0 ,0)';
         this.position.ele = null;

@@ -23,7 +23,6 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.clougence.clouddm.platform.dal.model.approval.ApprovalStatus;
-import com.clougence.clouddm.platform.dal.model.approval.DmApprovalDO;
 import com.clougence.clouddm.platform.dal.model.approval.ArgApprovalQueryObj;
 import com.clougence.clouddm.platform.dal.model.approval.DmApprovalDO;
 import com.clougence.clouddm.platform.dal.model.approval.DmTicketExportRow;
@@ -43,17 +42,9 @@ public interface DmApprovalMapper extends BaseMapper<DmApprovalDO> {
 
     IPage<DmApprovalDO> listAuthTicketByConditionAndPage(Page page, @Param("ticketQuery") ArgApprovalQueryObj ticketQueryObject);
 
-    /**
-     * 一段时间内工单按数据源汇总（GROUP BY bind_ds_id, ticket_status）。
-     */
-    List<DmTicketStatRow> statTicketByDs(@Param("puid") String puid, @Param("ticketQuery") ArgApprovalQueryObj ticketQueryObject);
-
-    /**
-     * 按条件取工单脚本用于导出（无分页，取全部匹配且有 raw_sql 的工单）。
-     */
-    List<DmTicketExportRow> listTicketExportRows(@Param("puid") String puid, @Param("ticketQuery") ArgApprovalQueryObj ticketQueryObject);
-
     DmApprovalDO queryByBizId(@Param("bizId") String bizId);
+
+    DmApprovalDO queryByBizIdWithoutRawSql(@Param("bizId") String bizId);
 
     DmApprovalDO queryById(@Param("id") Long id);
 
@@ -70,4 +61,17 @@ public interface DmApprovalMapper extends BaseMapper<DmApprovalDO> {
     void updateComment(@Param("ticketId") Long ticketId, @Param("comment") String comment);
 
     void updateTicketInfo(@Param("ticketId") Long ticketId, @Param("ticketInfo") String ticketInfo);
+
+    void updateExpectedAffectedRows(@Param("ticketId") Long ticketId, @Param("expectedAffectedRows") Long expectedAffectedRows);
+
+    /**
+     * 一段时间内工单按数据源汇总（GROUP BY bind_ds_id, ticket_status）。
+     */
+    List<DmTicketStatRow> statTicketByDs(@Param("puid") String puid, @Param("ticketQuery") ArgApprovalQueryObj ticketQueryObject);
+
+    /**
+     * 按条件取工单脚本用于导出（无分页，取全部匹配且有 raw_sql 的工单）。
+     */
+    List<DmTicketExportRow> listTicketExportRows(@Param("puid") String puid, @Param("ticketQuery") ArgApprovalQueryObj ticketQueryObject);
+
 }

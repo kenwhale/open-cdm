@@ -13,12 +13,15 @@
       :handleReadOnly="handleReadOnly"
       :storeQueryTabs="storeQueryTabs"
       :formatSql="formatSql"
-    />
+    >
+      <template #connection-context>
+        <slot name="connection-context" />
+      </template>
+    </operators>
     <Editor
       :set-editor-instance="setEditorInstance"
       :current-tab="tab"
       ref="editor"
-      style="border-bottom: 1px solid #ccc"
       :completion-data="completionData"
       :store-query-tabs="storeQueryTabs"
       :rdb-object-detail="rdbObjectDetail"
@@ -26,11 +29,11 @@
       @change="handleEditorChange"
     />
     <div class="editor-resize" />
-    <div :class="`message ${tab.message.type}`" v-if="tab.message.text && tab.message.show && tab.connected">
+    <div :class="`query-message ${tab.message.type}`" v-if="tab.message.text && tab.message.show && tab.connected">
       <div v-html="tab.message.text"></div>
       <CustomIcon type="icon-v2-close2" @click="handleCloseError" hoverStyle />
     </div>
-    <div class="message Error" v-if="!tab.connected && tab.msgContent">
+    <div class="query-message Error" v-if="!tab.connected && tab.msgContent">
       {{ tab.msgContent }}
       <Button type="text" size="small" @click="handleClickDsStatusIcon">
         {{ $t('zhong-xin-lian-jie') }}
@@ -61,6 +64,7 @@
   </div>
 </template>
 <script>
+import appLogger from '@/utils/logger';
 import * as monaco from 'monaco-editor';
 import { mapGetters, mapMutations, mapState } from 'vuex';
 import Operators from '@/views/sql/components/Operators';
@@ -109,7 +113,7 @@ export default {
           width: 200
         },
         {
-          title: this.$t('miao-shu'),
+          title: this.$t('wei-gui-ti-shi'),
           key: 'ruleDesc'
         }
       ];
@@ -305,9 +309,6 @@ export default {
     },
     async onRun(type = 'run', asyncForm) {
       this.storeQueryTabs();
-      if (window._hmt && this.isDesktop) {
-        window._hmt.push(['_trackEvent', 'execute sql', 'uid', 'personal']);
-      }
       const selection = this.monacoEditor.getSelection();
       const hasSelection =
         selection.selectionStartLineNumber !== selection.positionLineNumber || selection.selectionStartColumn !== selection.positionColumn;
@@ -477,7 +478,7 @@ export default {
       this.tab.text = value;
     },
     setSql(sql) {
-      console.log('setSql', sql);
+      appLogger.debug('setSql', sql);
       const position = this.monacoEditor.getPosition();
       let text = sql;
       if (position.column !== 1) {
@@ -925,7 +926,7 @@ export default {
           this.$bus.emit(EVENT_BUS_NAME_LIST.WS_RES_EXPORT_EVENT, queryData.object);
         }
       } catch (e) {
-        console.error(e);
+        appLogger.error(e);
       }
     },
     onerror() {},
@@ -953,7 +954,7 @@ export default {
     background: rgba(0, 0, 0, 0);
   }
 
-  .message {
+  .query-message {
     position: absolute;
     bottom: 0;
     width: 100%;

@@ -1,0 +1,332 @@
+[PoXSecDomainResolve4DatabaseTest_createDatabase_2]
+sql:
+CREATE DATABASE db1 default CHARACTER SET = UTF8;
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "CREATE_SCHEMA",
+      "auditKind": "CREATE",
+      "options": {},
+      "schema": "db1",
+      "ifNotExists": false,
+      "ifExists": false,
+      "characterSet": "UTF8"
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4InsertTest_insertColumn_1]
+sql:
+insert low_priority into test (a) values(1);
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "INSERT",
+      "auditKind": "DML",
+      "hasWith": false,
+      "table": "test",
+      "columns": [
+        "a"
+      ],
+      "onlyValues": false,
+      "multipleValues": false,
+      "conflict": "NONE",
+      "fromSelect": false,
+      "hasSubQuery": false,
+      "hasNullValue": false
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4InsertTest_insertColumn_2]
+sql:
+insert low_priority into test (a) values(1) ON DUPLICATE KEY UPDATE col_name = 1;
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "MERGE",
+      "auditKind": "DML",
+      "hasWith": false,
+      "table": "test",
+      "columns": [
+        "a",
+        "col_name"
+      ],
+      "onlyValues": false,
+      "multipleValues": false,
+      "conflict": "UPDATE",
+      "fromSelect": false,
+      "hasSubQuery": false,
+      "hasNullValue": false
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4InsertTest_insertSet_1]
+sql:
+insert DELAYED into test set a=1,b=3;
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "INSERT",
+      "auditKind": "DML",
+      "hasWith": false,
+      "table": "test",
+      "columns": [
+        "a",
+        "b"
+      ],
+      "onlyValues": false,
+      "multipleValues": false,
+      "conflict": "NONE",
+      "fromSelect": false,
+      "hasSubQuery": false,
+      "hasNullValue": false
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4InsertTest_insertSet_2]
+sql:
+insert DELAYED into test set a=1,b=3  ON DUPLICATE KEY UPDATE col_name = 1;
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "MERGE",
+      "auditKind": "DML",
+      "hasWith": false,
+      "table": "test",
+      "columns": [
+        "a",
+        "b",
+        "col_name"
+      ],
+      "onlyValues": false,
+      "multipleValues": false,
+      "conflict": "UPDATE",
+      "fromSelect": false,
+      "hasSubQuery": false,
+      "hasNullValue": false
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4InsertTest_insertSelect_1]
+sql:
+insert HIGH_PRIORITY into test select * from test1;
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "INSERT",
+      "auditKind": "DML",
+      "hasWith": false,
+      "table": "test",
+      "columns": [],
+      "onlyValues": true,
+      "multipleValues": false,
+      "conflict": "NONE",
+      "fromSelect": true,
+      "hasSubQuery": false,
+      "hasNullValue": false
+    },
+    {
+      "sqlType": "SELECT",
+      "auditKind": "QUERY",
+      "options": {},
+      "hasWith": false,
+      "hasWhere": false,
+      "whereColumns": [],
+      "selectInWhere": false,
+      "joinType": "NONE",
+      "hasUnion": false,
+      "simpleSelect": true,
+      "mode": "INSERT",
+      "virtual": false,
+      "hasAs": false,
+      "hasSelectAll": true,
+      "selectInSelect": false,
+      "funcInSelect": false,
+      "exprInSelect": false,
+      "selectColumns": [],
+      "selectVariables": [],
+      "selectFunc": [],
+      "selectValue": [],
+      "selectInFrom": false,
+      "emptyFrom": false,
+      "joinTypes": [],
+      "hasLimit": false
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4InsertTest_insertSelect_2]
+sql:
+insert HIGH_PRIORITY into test select * from test1  ON DUPLICATE KEY UPDATE col_name = 1;
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "MERGE",
+      "auditKind": "DML",
+      "hasWith": false,
+      "table": "test",
+      "columns": [
+        "col_name"
+      ],
+      "onlyValues": false,
+      "multipleValues": false,
+      "conflict": "UPDATE",
+      "fromSelect": true,
+      "hasSubQuery": false,
+      "hasNullValue": false
+    },
+    {
+      "sqlType": "SELECT",
+      "auditKind": "QUERY",
+      "options": {},
+      "hasWith": false,
+      "hasWhere": false,
+      "whereColumns": [],
+      "selectInWhere": false,
+      "joinType": "NONE",
+      "hasUnion": false,
+      "simpleSelect": true,
+      "mode": "INSERT",
+      "virtual": false,
+      "hasAs": false,
+      "hasSelectAll": true,
+      "selectInSelect": false,
+      "funcInSelect": false,
+      "exprInSelect": false,
+      "selectColumns": [],
+      "selectVariables": [],
+      "selectFunc": [],
+      "selectValue": [],
+      "selectInFrom": false,
+      "emptyFrom": false,
+      "joinTypes": [],
+      "hasLimit": false
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4TableTest_createTable_1]
+sql:
+CREATE TABLE single_tbl( id bigint not null auto_increment,  name varchar(30), primary key(id));
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "CREATE_TABLE",
+      "auditKind": "CREATE",
+      "options": {},
+      "table": "single_tbl",
+      "hasPrimary": true,
+      "hasUnique": false,
+      "hasForeignKey": false,
+      "hasIndex": false,
+      "columns": [
+        "id",
+        "name"
+      ],
+      "virtual": false,
+      "ifNotExists": false,
+      "ifExists": false,
+      "temporary": false
+    },
+    {
+      "sqlType": "CREATE_TABLE_ADD_COLUMN",
+      "auditKind": "CREATE",
+      "table": "single_tbl",
+      "column": "id",
+      "typeName": "bigint",
+      "typeDesc": "bigint",
+      "nullable": false,
+      "primary": true,
+      "unique": false,
+      "foreign": false,
+      "index": false,
+      "auto": true,
+      "zerofill": false,
+      "unsigned": false
+    },
+    {
+      "sqlType": "CREATE_TABLE_ADD_COLUMN",
+      "auditKind": "CREATE",
+      "table": "single_tbl",
+      "column": "name",
+      "typeName": "varchar",
+      "typeDesc": "varchar(30)",
+      "nullable": true,
+      "primary": false,
+      "unique": false,
+      "foreign": false,
+      "index": false,
+      "length": "30",
+      "auto": false,
+      "zerofill": false,
+      "unsigned": false
+    },
+    {
+      "sqlType": "CREATE_TABLE_ADD_CONSTRAINT",
+      "auditKind": "CREATE",
+      "tableName": "single_tbl",
+      "type": "Primary",
+      "columns": [
+        "id"
+      ]
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4TableTest_alterTableIndex_3]
+sql:
+ALTER TABLE t_order rename index a to b;
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "ALTER_INDEX",
+      "auditKind": "ALTER",
+      "tableName": "t_order",
+      "name": "a",
+      "newName": "b"
+    }
+  ]
+}
+----------
+[PoXSecDomainResolve4UpdateTest_columnIgnore_1]
+sql:
+update low_priority ignore table_name set aa = default where id = 1
+expect:
+{
+  "contains": [
+    {
+      "sqlType": "UPDATE",
+      "auditKind": "DML",
+      "hasWith": false,
+      "hasWhere": true,
+      "whereColumns": [
+        "id"
+      ],
+      "selectInWhere": false,
+      "hasUnion": false,
+      "table": "table_name",
+      "setColumns": [
+        "aa"
+      ],
+      "selectInSet": false,
+      "multiUpdate": false,
+      "joinTypes": [],
+      "hasLimit": false,
+      "hasIgnore": true
+    }
+  ]
+}
+----------

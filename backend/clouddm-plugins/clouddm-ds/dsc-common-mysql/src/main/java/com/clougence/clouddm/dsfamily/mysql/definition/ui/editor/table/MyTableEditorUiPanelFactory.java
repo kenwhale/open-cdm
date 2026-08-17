@@ -15,7 +15,10 @@
  */
 package com.clougence.clouddm.dsfamily.mysql.definition.ui.editor.table;
 
-import static com.clougence.clouddm.base.metadata.ui.form.UiUtils.*;
+import static com.clougence.clouddm.base.metadata.ui.form.UiUtils.boolValueDef;
+import static com.clougence.clouddm.base.metadata.ui.form.UiUtils.fieldOptionDef;
+import static com.clougence.clouddm.base.metadata.ui.form.UiUtils.optionDef;
+import static com.clougence.clouddm.base.metadata.ui.form.UiUtils.strValueDef;
 
 import java.sql.Connection;
 import java.sql.ResultSet;

@@ -30,6 +30,8 @@ public class RdpListTicketFO {
 
     private Long              ticketId;
 
+    private String            ticketBizId;
+
     private String            userName;
 
     private Long              startTimeMs;
@@ -38,14 +40,14 @@ public class RdpListTicketFO {
 
     private String            ticketTitleName;
 
-    private ApprovalStatus   ticketStatus;
+    private ApprovalStatus    ticketStatus;
 
     private RdpTicketListType ticketListType;
 
     /** 按数据源(数据库)过滤，空则不限制 */
     private List<Long>       dsIds;
 
-    private PageObj page;
+    private PageObj           page;
 
     @JsonIgnore
     private String            uid;

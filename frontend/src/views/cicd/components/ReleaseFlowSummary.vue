@@ -14,35 +14,43 @@
     <div class="summary-body">
       <div class="summary-group">
         <h3>{{ $t('ji-ben-xin-xi') }}</h3>
-        <div v-if="isCreateMode" class="summary-row">
+        <div v-if="createMode" class="summary-row">
           <span>{{ $t('xiang-mu-ming-cheng') }}</span>
           <strong>{{ summaryValue(flowBasicForm.flowName) }}</strong>
         </div>
-        <div v-if="isCreateMode" class="summary-row">
+        <div v-if="createMode" class="summary-row">
           <span>{{ $t('miao-shu') }}</span>
           <strong>{{ summaryValue(flowBasicForm.flowDesc) }}</strong>
         </div>
-        <div v-if="isCreateMode" class="summary-row">
+        <div v-if="createMode" class="summary-row">
           <span>{{ $t('fu-ze-ren') }}</span>
           <strong>{{ summaryValue(selectedManagerName) }}</strong>
         </div>
         <div class="summary-row">
+          <span>{{ $t('bian-geng-lei-xing') }}</span>
+          <strong>{{ isBuiltIn ? $t('nei-zhi-bian-geng-liu') : $t('nav-git-ops') }}</strong>
+        </div>
+        <div v-if="isBuiltIn" class="summary-row">
+          <span>{{ $t('shang-ji-bian-geng-liu') }}</span>
+          <strong>{{ summaryValue(selectedParentFlowName) }}</strong>
+        </div>
+        <div v-if="!isBuiltIn" class="summary-row">
           <span>{{ $t('nav-git-ops') }}</span>
           <strong>{{ summaryValue(selectedScmName) }}</strong>
         </div>
-        <div class="summary-row">
+        <div v-if="!isBuiltIn" class="summary-row">
           <span>{{ $t('cang-ku') }}</span>
           <strong>{{ summaryValue(flowGitOpsForm.repoName) }}</strong>
         </div>
-        <div class="summary-row">
+        <div v-if="!isBuiltIn" class="summary-row">
           <span>{{ $t('mu-biao-fen-zhi') }}</span>
           <strong>{{ summaryValue(flowGitOpsForm.repoBranch) }}</strong>
         </div>
-        <div class="summary-row">
+        <div v-if="!isBuiltIn" class="summary-row">
           <span>{{ $t('jiao-ben-lu-jin') }}</span>
           <strong>{{ summaryValue(flowGitOpsForm.repoScriptPath) }}</strong>
         </div>
-        <div class="summary-row">
+        <div v-if="!isBuiltIn" class="summary-row">
           <span>{{ $t('chu-fa-fang-shi') }}</span>
           <strong>{{ summaryValue(flowGitOpsForm.eventType) }}</strong>
         </div>
@@ -64,13 +72,13 @@
           <span>{{ $t('schema') }}</span>
           <strong>{{ summaryValue(flowGitOpsForm.schemaName) }}</strong>
         </div>
-        <div class="summary-row">
+        <div v-if="!isBuiltIn" class="summary-row">
           <span>{{ $t('chu-shi-hua-fang-shi') }}</span>
           <strong>{{ summaryValue(selectedInitLabel) }}</strong>
         </div>
       </div>
 
-      <div v-if="isCreateMode" class="summary-group">
+      <div v-if="createMode" class="summary-group">
         <h3>{{ $t('tong-zhi-pei-zhi') }}</h3>
         <div class="summary-row">
           <span>{{ $t('tong-zhi-qu-dao') }}</span>
@@ -87,23 +95,23 @@
         <h3>{{ $t('zhi-xing-pei-zhi') }}</h3>
         <div class="summary-row">
           <span>{{ $t('sql-shen-he-0') }}</span>
-          <strong>{{ selectedCheckLabel }}</strong>
+          <strong>{{ $t('cicd-work-order-auto-analysis') }}</strong>
         </div>
         <div class="summary-row">
           <span>{{ $t('shen-pi-liu') }}</span>
-          <strong>{{ selectedApproveLabel }}</strong>
+          <strong>{{ $t('cicd-work-order-env-approval') }}</strong>
         </div>
         <div class="summary-row">
           <span>{{ $t('fa-bu-fang-shi') }}</span>
-          <strong>{{ selectedPublishLabel }}</strong>
+          <strong>{{ $t('cicd-work-order-confirm-execution') }}</strong>
         </div>
-        <div class="summary-row summary-row-reserved">
+        <div class="summary-row">
           <span>{{ $t('shi-yong-shi-wu') }}</span>
-          <strong>{{ selectedTransactionalLabel }}</strong>
+          <strong>{{ $t('cicd-work-order-configured-in-ticket') }}</strong>
         </div>
-        <div class="summary-row summary-row-reserved">
+        <div class="summary-row">
           <span>{{ $t('cuo-wu-ce-lve') }}</span>
-          <strong>{{ selectedErrorLabel }}</strong>
+          <strong>{{ $t('cicd-work-order-configured-in-ticket') }}</strong>
         </div>
       </div>
     </div>
@@ -114,7 +122,7 @@
 export default {
   name: 'ReleaseFlowSummary',
   props: {
-    isCreateMode: { type: Boolean, required: true },
+    createMode: { type: Boolean, required: true },
     flowBasicForm: { type: Object, required: true },
     flowGitOpsForm: { type: Object, required: true },
     selectedManagerName: { type: String, default: '' },
@@ -124,11 +132,8 @@ export default {
     summaryImChannel: { type: String, default: '' },
     selectedImProviderName: { type: String, default: '' },
     subscriptionSummary: { type: String, default: '' },
-    selectedCheckLabel: { type: String, default: '' },
-    selectedApproveLabel: { type: String, default: '' },
-    selectedPublishLabel: { type: String, default: '' },
-    selectedTransactionalLabel: { type: String, default: '' },
-    selectedErrorLabel: { type: String, default: '' }
+    isBuiltIn: { type: Boolean, default: false },
+    selectedParentFlowName: { type: String, default: '' }
   },
   emits: ['open-help'],
   methods: {

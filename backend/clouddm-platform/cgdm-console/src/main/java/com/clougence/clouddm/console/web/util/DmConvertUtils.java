@@ -30,8 +30,12 @@ import com.clougence.clouddm.api.common.ResultEnum;
 import com.clougence.clouddm.api.common.exception.ErrorMessageException;
 import com.clougence.clouddm.api.sidecar.session.execute.ResultPageDTO;
 import com.clougence.clouddm.base.metadata.ds.*;
+import com.clougence.clouddm.console.web.component.analysis.BehaviorRelations;
+import com.clougence.clouddm.console.web.component.analysis.BehaviorRequest;
+import com.clougence.clouddm.console.web.component.approval.model.TicketRuleCheckResult;
 import com.clougence.clouddm.console.web.component.cicd.model.ChangeCheckItemMO;
 import com.clougence.clouddm.console.web.component.detectrule.SecHintInfo;
+import com.clougence.clouddm.console.web.component.detectrule.SecRulesCheckResult;
 import com.clougence.clouddm.console.web.component.detectrule.domain.SecRange;
 import com.clougence.clouddm.console.web.component.detectrule.domain.SecRangeItem;
 import com.clougence.clouddm.console.web.component.dsconfig.mode.DsConfigKvDef;
@@ -50,6 +54,8 @@ import com.clougence.clouddm.console.web.model.fo.ssh.SshConfigSaveFO;
 import com.clougence.clouddm.console.web.model.fo.ssh.SshProxyFeaturesFO;
 import com.clougence.clouddm.console.web.model.vo.DsKvConfigVO;
 import com.clougence.clouddm.console.web.model.vo.audit.OperateUserVO;
+import com.clougence.clouddm.console.web.model.vo.audit.SqlAuditRequestVO;
+import com.clougence.clouddm.console.web.model.vo.audit.SqlAuditVO;
 import com.clougence.clouddm.console.web.model.vo.browse.BrowseLevelsVO;
 import com.clougence.clouddm.console.web.model.vo.browse.cache.BrowseKeyVO;
 import com.clougence.clouddm.console.web.model.vo.browse.rdb.*;
@@ -64,6 +70,7 @@ import com.clougence.clouddm.console.web.model.vo.faker.DmAsyncTaskVO;
 import com.clougence.clouddm.console.web.model.vo.openapi.DmApiDataSourceVO;
 import com.clougence.clouddm.console.web.model.vo.ssh.SshConfigDetailVO;
 import com.clougence.clouddm.console.web.model.vo.ssh.SshConfigListVO;
+import com.clougence.clouddm.console.web.model.vo.ticket.DmTicketResultVO;
 import com.clougence.clouddm.console.web.service.browse.model.ActionInfo;
 import com.clougence.clouddm.console.web.service.browse.model.ActionTargetMO;
 import com.clougence.clouddm.console.web.service.browse.model.GenerateSqlDataAuthEnum;
@@ -78,7 +85,7 @@ import com.clougence.clouddm.console.web.service.security.mode.DmSecRuleMO;
 import com.clougence.clouddm.platform.dal.access.ObjectCacheDao;
 import com.clougence.clouddm.platform.dal.access.entry.UserCacheEntry;
 import com.clougence.clouddm.platform.dal.model.auth.RsAuthPersonObj;
-import com.clougence.clouddm.platform.dal.model.cicd.ChangeStatus;
+import com.clougence.clouddm.platform.dal.model.cicd.ChangeFlowType;
 import com.clougence.clouddm.platform.dal.model.cicd.DmChangeDO;
 import com.clougence.clouddm.platform.dal.model.cicd.DmChangeFlowDO;
 import com.clougence.clouddm.platform.dal.model.datasource.DataSourceStatus;
@@ -86,6 +93,7 @@ import com.clougence.clouddm.platform.dal.model.datasource.DmDsConfigKv4DmDO;
 import com.clougence.clouddm.platform.dal.model.datasource.DmDsDO;
 import com.clougence.clouddm.platform.dal.model.datasource.DmSshConfigDO;
 import com.clougence.clouddm.platform.dal.model.execution.DmExecAsyncTaskDO;
+import com.clougence.clouddm.platform.dal.model.execution.DmExecSqlAuditDO;
 import com.clougence.clouddm.platform.dal.model.gitops.DmGitOpsScmDO;
 import com.clougence.clouddm.platform.dal.model.gitops.ScmType;
 import com.clougence.clouddm.platform.dal.model.secrule.*;
@@ -97,10 +105,13 @@ import com.clougence.clouddm.sdk.execute.session.rdb.RdbIsolation;
 import com.clougence.clouddm.sdk.execute.session.rdb.RdbSupportSpi;
 import com.clougence.clouddm.sdk.language.AbstractRequest;
 import com.clougence.clouddm.sdk.language.LanguageResult;
-import com.clougence.clouddm.sdk.model.analysis.TargetType;
-import com.clougence.clouddm.sdk.security.auth.SecQueryType;
 import com.clougence.clouddm.sdk.service.secrules.CheckerRange;
+import com.clougence.clouddm.sdk.service.secrules.RuleLevel;
 import com.clougence.clouddm.sdk.service.secrules.SecParam;
+import com.clougence.clouddm.sdk.sql.analysis.behavior.BehaviorAction;
+import com.clougence.clouddm.sdk.sql.analysis.behavior.BehaviorObject;
+import com.clougence.clouddm.sdk.sql.analysis.behavior.TargetType;
+import com.clougence.clouddm.sdk.sql.parser.SplitQueryType;
 import com.clougence.clouddm.sdk.ui.editor.data.DataEditorSqlType;
 import com.clougence.clouddm.sdk.ui.editor.dblink.DbLinkEditorFields;
 import com.clougence.clouddm.sdk.ui.editor.function.FunctionEditorFields;
@@ -138,6 +149,84 @@ import com.fasterxml.jackson.core.type.TypeReference;
  **/
 public class DmConvertUtils {
 
+    private static final RuleLevel[] CHECK_LEVELS_FAILURE = new RuleLevel[] { RuleLevel.FAILURE };
+
+    public static List<TicketRuleCheckResult> convertToTicketRuleCheckResults(SecRulesCheckResult result) {
+        Objects.requireNonNull(result, "result");
+
+        List<TicketRuleCheckResult> checkedResults = new ArrayList<>();
+        result.getChecked().forEach((name, level) -> {
+            TicketRuleCheckResult checked = new TicketRuleCheckResult();
+            checked.setName(name);
+            checked.setRuleLevel(level);
+            checked.setHitCount(result.getHitCountMap().getOrDefault(name, 0L));
+            checked.setDesc(result.getMessageMap().get(name));
+            Set<Integer> lines = result.getScriptMap().get(name);
+            if (lines != null && !lines.isEmpty()) {
+                checked.setLines(lines.stream().sorted().toList());
+            }
+            checkedResults.add(checked);
+        });
+        return checkedResults;
+    }
+
+    public static DmTicketResultVO convertToRuleCheckResult(SecRulesCheckResult result) {
+        DmTicketResultVO vo = new DmTicketResultVO();
+        vo.setConfirm(!result.isAllSuccess());
+        vo.setFailure(result.hasAnyTarget(CHECK_LEVELS_FAILURE));
+
+        vo.setCheckedVOS(convertToTicketRuleCheckResults(result));
+        return vo;
+    }
+
+    public static SqlAuditVO convertToSqlAuditVO(DmExecSqlAuditDO auditDO) {
+        SqlAuditVO vo = new SqlAuditVO();
+        vo.setId(auditDO.getId());
+        if (auditDO.getEndTime() != null) {
+            long cost = auditDO.getEndTime().getTime() - auditDO.getOperateTime().getTime();
+            vo.setCost(cost == 0 ? 1 : cost);
+        }
+
+        vo.setDataSourceType(auditDO.getDataSourceType());
+        vo.setUid(auditDO.getUid());
+        vo.setUserName(auditDO.getUserName());
+        vo.setOperateTime(auditDO.getOperateTime());
+        vo.setExecSql(auditDO.getExecSql());
+        vo.setRewrite(StringUtils.isNotBlank(auditDO.getOriginalSql()));
+        vo.setOriginalSql(auditDO.getOriginalSql());
+        vo.setClientIp(auditDO.getClientIp());
+        vo.setLogIp(auditDO.getLogIp());
+        vo.setRequester(auditDO.getRequester());
+
+        Map<String, SqlAuditRequestVO> requests = new LinkedHashMap<>();
+        for (BehaviorRequest behavior : BehaviorRelations.flattenResourceIgnoringPermission(auditDO.getBehaviors())) {
+            SqlAuditRequestVO request = convertToSqlAuditRequestVO(behavior.action(), behavior.resource());
+            if (request != null) {
+                String key = request.getAction() + "|" + request.getResourceType() + "|" + request.getResourcePath();
+                requests.putIfAbsent(key, request);
+            }
+        }
+        vo.setRequests(new ArrayList<>(requests.values()));
+        vo.setAffectLine(auditDO.getAffectLine());
+        vo.setStatus(auditDO.getStatus());
+        vo.setDsId(auditDO.getDsId());
+        vo.setDsDesc(auditDO.getDsDesc());
+        vo.setDsResourceId(auditDO.getDsDesc());
+        vo.setMessage(auditDO.getMessage());
+        return vo;
+    }
+
+    public static SqlAuditRequestVO convertToSqlAuditRequestVO(BehaviorAction action, BehaviorObject resource) {
+        if (action == null || resource == null) {
+            return null;
+        }
+        SqlAuditRequestVO request = new SqlAuditRequestVO();
+        request.setResourceType(Objects.requireNonNullElse(resource.getObjectType(), TargetType.Unknown));
+        request.setResourcePath(DmDsUtils.normalizeResourcePath(resource.getObjectPath()));
+        request.setAction(action);
+        return request;
+    }
+
     public static WsLanguageResult convertToWsLanguageResult(WsLanguageFO fo, LanguageResult result) {
         WsLanguageResult res = new WsLanguageResult();
         res.setCurUserId(fo.getCurrentUserId());
@@ -169,28 +258,6 @@ public class DmConvertUtils {
         res.setMsg(msg);
         res.setResult(result);
         return res;
-    }
-
-    public static Map<TargetType, String> convertToResource(DsLevels dsLevels, String tableOrView) {
-        Map<TargetType, String> result = new HashMap<>();
-
-        result.put(TargetType.Environment, dsLevels.envId());
-        result.put(TargetType.Instance, String.valueOf(dsLevels.dsDO().getId()));
-
-        Map<UmiTypes, Object> levelsParam = dsLevels.levelsParam();
-        for (UmiTypes umiType : dsLevels.levelsDef()) {
-            switch (umiType) {
-                case Catalog:
-                    result.put(TargetType.Catalog, (String) levelsParam.get(umiType));
-                    break;
-                case Schema:
-                    result.put(TargetType.Schema, (String) levelsParam.get(umiType));
-                    break;
-            }
-        }
-        result.put(TargetType.Table, tableOrView);
-
-        return result;
     }
 
     public static BrowseLevelsVO convertToBrowseLevelsVO(DmSysEnvDO dsEnvDO) {
@@ -1666,19 +1733,14 @@ public class DmConvertUtils {
         }
     }
 
-    public static SecQueryType convertToSecQueryType(DataEditorSqlType sqlType) {
-        switch (sqlType) {
-            case INSERT:
-                return SecQueryType.INSERT;
-            case UPDATE:
-                return SecQueryType.UPDATE;
-            case DELETE:
-                return SecQueryType.DELETE;
-            case SELECT:
-                return SecQueryType.SELECT;
-            default:
-                return SecQueryType.UNKNOWN;
-        }
+    public static SplitQueryType convertToSecQueryType(DataEditorSqlType sqlType) {
+        return switch (sqlType) {
+            case INSERT -> SplitQueryType.INSERT;
+            case UPDATE -> SplitQueryType.UPDATE;
+            case DELETE -> SplitQueryType.DELETE;
+            case SELECT -> SplitQueryType.SELECT;
+            default -> SplitQueryType.UNKNOWN;
+        };
     }
 
     public static DevopsScmVO convertToDevopsScmVO(DmGitOpsScmDO scmDO, Map<ScmType, DmScmDef> defMap) {
@@ -1706,11 +1768,10 @@ public class DmConvertUtils {
         flowVO.setFlowUid(flowDO.getFlowUid());
         flowVO.setMark("");
         flowVO.setFlowStatus(flowDO.getChangeFlowStatus());
+        flowVO.setFlowType(flowDO.getFlowType() == null ? ChangeFlowType.SCM : flowDO.getFlowType());
+        flowVO.setParentFlowId(flowDO.getRefParentFlowId());
         flowVO.setFlowName(flowDO.getFlowName());
         flowVO.setFlowDesc(flowDO.getFlowDesc());
-        flowVO.setFlowCheck(flowDO.getFlowCheck());
-        flowVO.setFlowApprove(flowDO.getFlowApprove());
-        flowVO.setFlowExecute(flowDO.getFlowExecute());
         flowVO.setOptions(flowDO.getOptions());
         flowVO.setScmType(flowDO.getRefScmType());
         flowVO.setRepoName(flowDO.getScmRepoName());
@@ -1768,11 +1829,15 @@ public class DmConvertUtils {
     public static DevopsScmRepoVO convertToDevopsScmRepoVO(DmRepoDef repo) {
         DevopsScmRepoVO vo = new DevopsScmRepoVO();
         vo.setScmId(repo.getScmId());
+        vo.setRepoId(repo.getRepoId());
+        vo.setRepoPath(repo.getRepoPath());
         vo.setRepoSpace(repo.getRepoSpace());
         vo.setRepoName(repo.getRepoName());
         vo.setRepoUrl(repo.getRepoUrl());
         vo.setRepoHome(repo.getRepoHome());
         vo.setRepoBranch(repo.getBranch());
+        vo.setArchived(repo.isArchived());
+        vo.setEmpty(repo.isEmpty());
         return vo;
     }
 
@@ -1848,10 +1913,17 @@ public class DmConvertUtils {
 
         ChangeFlowGitOpsVO vo = new ChangeFlowGitOpsVO();
         vo.setFlowId(gitOpsFlowDO.getId());
+        ChangeFlowType flowType = gitOpsFlowDO.getFlowType() == null ? ChangeFlowType.SCM : gitOpsFlowDO.getFlowType();
+        vo.setFlowType(flowType);
+        vo.setParentFlowId(gitOpsFlowDO.getRefParentFlowId());
         vo.setScmId(gitOpsFlowDO.getRefScmId());
         vo.setScmType(gitOpsFlowDO.getRefScmType());
-        vo.setScmTypeI18n(DmI18nUtils.getMessage(gitOpsFlowDO.getRefScmType().getI18nKey()));
-        if (scmDO != null) {
+        if (gitOpsFlowDO.getRefScmType() != null) {
+            vo.setScmTypeI18n(DmI18nUtils.getMessage(gitOpsFlowDO.getRefScmType().getI18nKey()));
+        }
+        if (flowType == ChangeFlowType.BUILT_IN) {
+            vo.setScmDisplay(null);
+        } else if (scmDO != null) {
             vo.setScmDisplay(scmDO.getScmDisplay());
         } else {
             vo.setScmDisplay(DmI18nUtils.getMessage(I18nDmMsgKeys.DEVOPS_MISSING_SCM_ERROR.name()));
@@ -1876,19 +1948,22 @@ public class DmConvertUtils {
         }
 
         vo.setDsLevels(StringUtils.stringToList(gitOpsFlowDO.getDsPath().substring(1), "/"));
-        vo.setWebHookUrl(generateCicdWebhookEventUrl(gitOpsFlowDO));
-        vo.setWebHookPwd(gitOpsFlowDO.getScmBindWebhookPwd());
-        DmScmDef defByType = dmScmService.getScmDefByType(gitOpsFlowDO.getRefScmType());
-        if (defByType != null) {
-            vo.setWebHookHelpUrl(defByType.getHelpUrl());
+        if (flowType == ChangeFlowType.SCM) {
+            vo.setWebHookUrl(generateCicdWebhookEventUrl(gitOpsFlowDO));
+            vo.setWebHookPwd(gitOpsFlowDO.getScmBindWebhookPwd());
+            DmScmDef defByType = dmScmService.getScmDefByType(gitOpsFlowDO.getRefScmType());
+            if (defByType != null) {
+                vo.setWebHookHelpUrl(defByType.getHelpUrl());
+            }
         }
         vo.setWebHookEnable(gitOpsFlowDO.isEnable() && gitOpsFlowDO.isEnableWebhook());
+        vo.setWebHookSigningTokenConfigured(StringUtils.isNotBlank(gitOpsFlowDO.getScmBindWebhookSigningToken()));
 
         vo.setCallbackUrl(gitOpsFlowDO.getCallbackUrl());
         vo.setCallbackMethod(gitOpsFlowDO.getCallbackMethod());
         vo.setCallbackEnable(gitOpsFlowDO.isEnable() && gitOpsFlowDO.isEnableCallback());
 
-        vo.setTriggerUrl(generateCicdTriggerUrl(gitOpsFlowDO));
+        vo.setTriggerUrl(flowType == ChangeFlowType.SCM ? generateCicdTriggerUrl(gitOpsFlowDO) : null);
         vo.setTriggerEnable(gitOpsFlowDO.isEnableTrigger());
         vo.setTriggerToken(gitOpsFlowDO.getTriggerToken());
 
@@ -1896,28 +1971,24 @@ public class DmConvertUtils {
         return vo;
     }
 
-    private static <T> T afterReadyReturnLast(ChangeStatus status, T one, T two) {
-        switch (status) {
-            case OPEN:
-            case READY:
-                return one;
-            case WAIT:
-            case FINISH:
-            case CLOSED:
-            case FAILED:
-            default:
-                return two;
-        }
-    }
-
-    public static ChangeVO convertToChangeVO(DmChangeFlowDO flowDO, DmChangeDO obj, Map<Long, DmChangeFlowDO> devopsMap, Map<Long, DmDsDO> dsMap, Map<Long, DmGitOpsScmDO> scmMap) {
+    public static ChangeVO convertToChangeVO(DmChangeFlowDO flowDO, DmChangeDO obj, Map<Long, DmChangeFlowDO> devopsMap, Map<Long, DmDsDO> dsMap, Map<Long, DmGitOpsScmDO> scmMap,
+                                             ObjectCacheDao objectCacheDao) {
         DmChangeFlowDO gitOpsFlowDO = devopsMap.get(obj.getRefFlowId());
         DmDsDO dsDO = dsMap.get(gitOpsFlowDO.getDsId());
         DmGitOpsScmDO scmDO = scmMap.get(gitOpsFlowDO.getRefScmId());
 
         ChangeVO vo = new ChangeVO();
         vo.setChangeId(obj.getId());
+        vo.setBatchId(obj.getRefBatchId());
+        vo.setParentChangeId(obj.getRefParentChangeId());
+        vo.setFlowType(gitOpsFlowDO.getFlowType() == null ? ChangeFlowType.SCM : gitOpsFlowDO.getFlowType());
         vo.setFlowId(obj.getRefFlowId());
+        UserCacheEntry flowManager = objectCacheDao.queryByUid(gitOpsFlowDO.getFlowManagerUid());
+        if (flowManager == null) {
+            vo.setFlowManagerName("UID:" + gitOpsFlowDO.getFlowManagerUid());
+        } else {
+            vo.setFlowManagerName(flowManager.getUserName());
+        }
         vo.setChangeName(obj.getChangeName());
         vo.setChangeTime(WellKnowFormat.WKF_DATE_TIME24.format(obj.getChangeTime()));
         vo.setCurrentStatus(obj.getCurrentStatus());
@@ -1927,39 +1998,15 @@ public class DmConvertUtils {
         vo.setChangeFlowStatus(flowDO.getChangeFlowStatus());
 
         // init
-        vo.setFlowCheck(flowDO.getFlowCheck());
-        vo.setFlowApprove(flowDO.getFlowApprove());
-        vo.setFlowExecute(flowDO.getFlowExecute());
-        switch (obj.getCurrentStep()) {
-            case INIT_SNAPSHOT:
-            case INIT:
-                break;
-            case CHECK:
-                vo.setFlowCheck(afterReadyReturnLast(obj.getCurrentStatus(), flowDO.getFlowCheck(), obj.getFlowWalked().getFlowCheck()));
-                break;
-            case APPROVAL:
-                vo.setFlowCheck(obj.getFlowWalked().getFlowCheck());
-                vo.setFlowApprove(afterReadyReturnLast(obj.getCurrentStatus(), flowDO.getFlowApprove(), obj.getFlowWalked().getFlowApprove()));
-                break;
-            case EXECUTE:
-                vo.setFlowCheck(obj.getFlowWalked().getFlowCheck());
-                vo.setFlowApprove(obj.getFlowWalked().getFlowApprove());
-                vo.setFlowExecute(afterReadyReturnLast(obj.getCurrentStatus(), flowDO.getFlowExecute(), obj.getFlowWalked().getFlowExecute()));
-            case FINISH:
-                vo.setFlowCheck(obj.getFlowWalked().getFlowCheck());
-                vo.setFlowApprove(obj.getFlowWalked().getFlowApprove());
-                vo.setFlowExecute(obj.getFlowWalked().getFlowExecute());
-                break;
-            default:
-                break;
-        }
 
         vo.setLocked(obj.isLockStatus());
 
         vo.setScmId(gitOpsFlowDO.getRefScmId());
-        vo.setScmDisplay(scmDO == null ? "(Deleted)" : scmDO.getScmDisplay());
+        vo.setScmDisplay(gitOpsFlowDO.getRefScmId() == null ? null : scmDO == null ? "(Deleted)" : scmDO.getScmDisplay());
         vo.setScmType(gitOpsFlowDO.getRefScmType());
-        vo.setScmTypeI18n(DmI18nUtils.getMessage(gitOpsFlowDO.getRefScmType().getI18nKey()));
+        if (gitOpsFlowDO.getRefScmType() != null) {
+            vo.setScmTypeI18n(DmI18nUtils.getMessage(gitOpsFlowDO.getRefScmType().getI18nKey()));
+        }
         vo.setRepoUrl(gitOpsFlowDO.getScmRepoUrl());
         vo.setRepoName(gitOpsFlowDO.getScmRepoName());
         vo.setRepoBranch(gitOpsFlowDO.getScmRepoBranch());
@@ -1969,13 +2016,17 @@ public class DmConvertUtils {
         vo.setDsType(gitOpsFlowDO.getDsType());
         vo.setDsInstance(gitOpsFlowDO.getDsInstance());
         vo.setDsDesc(gitOpsFlowDO.getDsDesc());
-        if (RdpConvertUtils.removeNoDescription(dsDO.getInstanceDesc()) == null) {
+        if (dsDO == null) {
+            vo.setDsDisplay(gitOpsFlowDO.getDsInstance());
+            vo.setDsHost(DmI18nUtils.getMessage(I18nDmMsgKeys.DEVOPS_MISSING_DS_ERROR.name()));
+        } else if (RdpConvertUtils.removeNoDescription(dsDO.getInstanceDesc()) == null) {
             vo.setDsDisplay(dsDO.getInstanceId());
         } else {
             vo.setDsDisplay(dsDO.getInstanceDesc());
         }
-
-        vo.setDsHost(dsDO.getHost());
+        if (dsDO != null) {
+            vo.setDsHost(dsDO.getHost());
+        }
         vo.setDsLevels(Collections.emptyList());
         return vo;
     }

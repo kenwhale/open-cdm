@@ -28,12 +28,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 import com.clougence.clouddm.api.common.GlobalConfUtils;
-import com.clougence.clouddm.api.common.GlobalConfUtils;
 import com.clougence.clouddm.component.resultfile.ResultFileRequests;
 import com.clougence.clouddm.component.resultfile.ResultFileWriter;
-import com.clougence.clouddm.component.resultfile.ResultFileRequests;
-import com.clougence.clouddm.component.resultfile.ResultFileWriter;
-import com.clougence.clouddm.console.web.global.events.DmGlobalEventBus;
 import com.clougence.clouddm.console.web.global.events.DmGlobalEventBus;
 import com.clougence.clouddm.console.web.global.i18n.DmI18nUtils;
 import com.clougence.clouddm.console.web.model.fo.ExportOpAuditFO;
@@ -335,6 +331,34 @@ public class RdpOpAuditServiceImpl implements RdpOpAuditService {
         return auditVOs;
     }
 
+    @Override
+    public DmPageVO<RdpOpAuditVO> pageUserAllAudit(String puid, String uid, SecurityLevel securityLevel, String userNameLike, String auditType, String resourceType, Date start,
+                                                   Date end, int pageNumber, int pageSize) {
+        if (pageSize == 0) {
+            pageSize = DEFAULT_PAGE_SIZE;
+        } else if (pageSize > MAX_PAGE_SIZE) {
+            pageSize = MAX_PAGE_SIZE;
+        }
+        if (pageNumber < 1) {
+            pageNumber = 1;
+        }
+
+        int offset = (pageNumber - 1) * pageSize;
+        List<DmMonOpAuditDO> auditDOs = monitorDal.opAuditMapper().pageByCondition(puid, uid, securityLevel, auditType, resourceType, userNameLike, start, end, offset, pageSize);
+        List<RdpOpAuditVO> auditVOs = new ArrayList<>();
+        if (auditDOs != null && !auditDOs.isEmpty()) {
+            auditVOs = auditDOs.stream().map(auditDO -> {
+                RdpOpAuditVO auditVO = new RdpOpAuditVO().convertFromDO(auditDO);
+                auditVO.setIsExistsLog(StringUtils.isNotBlank(auditVO.getAuditType()) && isExistsLogSet.contains(auditVO.getAuditType()));
+                return auditVO;
+            }).collect(Collectors.toList());
+            fillExtraVO(auditVOs);
+        }
+
+        long total = monitorDal.opAuditMapper().countByCondition(puid, uid, securityLevel, auditType, resourceType, userNameLike, start, end);
+        return new DmPageVO<>(pageNumber, pageSize, total, auditVOs);
+    }
+
     private String genUUIDKey(Date currentTime) {
         String date = new SimpleDateFormat("yyyyMMddHHmmss").format(currentTime);
         return date + UUID.randomUUID().toString().substring(0, 8);
@@ -433,7 +457,7 @@ public class RdpOpAuditServiceImpl implements RdpOpAuditService {
     }
 
     private long prepareAuditResultFile(ExportOpAuditFO fo, String requesterUid, String exportId, File resultFile) throws IOException {
-        ResultFileRequests.ResultFileRequest resultRequest = ResultFileRequests.fromColumns(exportId, "operation audit export", this.exportColumns(), this.exportVariables());
+        ResultFileRequests.ResultFileRequest resultRequest = ResultFileRequests.fromColumns(exportId, "operation audit export", this.exportColumns());
         long preparedRows = 0;
         int offset = 0;
         int batchSize = 1000;
@@ -489,14 +513,6 @@ public class RdpOpAuditServiceImpl implements RdpOpAuditService {
         columns.put(DmI18nUtils.getMessage("EXPORT_OPAUDIT_SECURITY_LEVEL"), JDBCType.VARCHAR);
         columns.put(DmI18nUtils.getMessage("EXPORT_OPAUDIT_UUID_KEY"), JDBCType.VARCHAR);
         return columns;
-    }
-
-    private Map<String, String> exportVariables() {
-        Map<String, String> variables = new LinkedHashMap<>();
-        variables.put("Environment", "DM");
-        variables.put("DataSource", "operation_audit");
-        variables.put("User", "DM");
-        return variables;
     }
 
     private List<String> exportRow(RdpOpAuditVO auditVO) {

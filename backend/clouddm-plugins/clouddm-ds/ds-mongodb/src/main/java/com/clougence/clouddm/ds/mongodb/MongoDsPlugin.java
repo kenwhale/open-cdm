@@ -26,6 +26,7 @@ import com.clougence.clouddm.ds.mongodb.dsconf.MongoSerializationSpi;
 import com.clougence.clouddm.ds.mongodb.execute.MongoSessionFactory;
 import com.clougence.clouddm.ds.mongodb.execute.MongoSessionSpi;
 import com.clougence.clouddm.ds.mongodb.execute.MongoSupportSpi;
+import com.clougence.clouddm.ds.mongodb.i18n.MongoConfigI18nKeys;
 import com.clougence.clouddm.ds.mongodb.i18n.MongoDsI18nKeys;
 import com.clougence.clouddm.ds.mongodb.language.MongoLanguageSpi;
 import com.clougence.clouddm.ds.mongodb.resource.MongoEditorResourceSpi;
@@ -34,12 +35,10 @@ import com.clougence.clouddm.sdk.DsPlugin;
 import com.clougence.clouddm.sdk.DsPluginBinder;
 import com.clougence.clouddm.sdk.Plugin;
 import com.clougence.clouddm.sdk.service.execute.MetaService;
-import com.clougence.clouddm.sdk.sql.SqlEngineSpi;
 import com.clougence.schema.DsType;
 import com.clougence.schema.SchemaBinder;
 import com.clougence.schema.SchemaFramework;
 import com.clougence.schema.SchemaPlugin;
-import com.clougence.sql.mongodb.MongoSqlEngineSpi;
 
 /**
  * @author mode 2021/4/25 15:13
@@ -77,9 +76,7 @@ public class MongoDsPlugin implements DsPlugin, SchemaPlugin, DsFeatureIDs {
     private void configExecute(DsPluginBinder dsPlugin) {
         dsPlugin.bindDsSessionFactory(MongoSessionFactory.class);
         dsPlugin.bindDsDriverFamily("MongoDB Driver");
-
-        dsPlugin.bindSqlEngine(MongoSqlEngineSpi.NAME);
-        dsPlugin.addGlobalSpi(SqlEngineSpi.class, MongoSqlEngineSpi.NAME, new MongoSqlEngineSpi(dsPlugin.findGlobalService(MetaService.class)));
+        dsPlugin.bindSqlEngine("MongoDB DSL");
 
         dsPlugin.addPluginSpi(new MongoConfigSpi());
         dsPlugin.addPluginSpi(new MongoSupportSpi());
@@ -88,6 +85,7 @@ public class MongoDsPlugin implements DsPlugin, SchemaPlugin, DsFeatureIDs {
 
     private void configUi(DsPluginBinder dsPlugin) {
         dsPlugin.bindPluginI18n(MongoDsI18nKeys.class);
+        dsPlugin.bindPluginI18n(MongoConfigI18nKeys.class);
         // defService
         //dsPlugin.bindDefinitionService(new ClickHouseDefinitionService());
         dsPlugin.bindDsDialect(DefaultDialect.DEFAULT);

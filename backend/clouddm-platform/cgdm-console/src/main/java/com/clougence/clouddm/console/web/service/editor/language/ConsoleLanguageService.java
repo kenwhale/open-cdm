@@ -44,7 +44,6 @@ import com.clougence.clouddm.console.web.model.vo.editor.WsResult;
 import com.clougence.clouddm.console.web.util.DmConvertUtils;
 import com.clougence.clouddm.console.web.util.RdpAuthUtils;
 import com.clougence.clouddm.platform.dal.model.datasource.DmDsDO;
-import com.clougence.clouddm.platform.plugin.PluginManager;
 import com.clougence.clouddm.sdk.execute.session.SessionContextDTO;
 import com.clougence.clouddm.sdk.execute.session.SessionSpi;
 import com.clougence.clouddm.sdk.language.AbstractRequest;
@@ -103,6 +102,14 @@ public class ConsoleLanguageService implements UnifiedPostConstruct, ConsoleLang
             request = new JSONObject();
         }
 
+        Object sqlText = request.get("sqlText");
+        int maxKiloByte = this.userConfigService.languageMaxRequestKiloByte();
+        if (sqlText instanceof String && exceedsUtf8Limit((String) sqlText, maxKiloByte * 1024L)) {
+            String message = DmI18nUtils.getMessage(I18nDmMsgKeys.DS_LANGUAGE_REQUEST_TOO_LARGE.name(), maxKiloByte);
+            consumer.accept(DmConvertUtils.convertToWsLanguageErrorResult(fo, null, DmErrorCode.DS_LANGUAGE_ERROR.code(), message));
+            return;
+        }
+
         LanguageCtx ctx = createLanguageCtx(fo);
         AbstractRequest parsed = parseRequest(fo, ctx, request);
 
@@ -132,6 +139,28 @@ public class ConsoleLanguageService implements UnifiedPostConstruct, ConsoleLang
         }
     }
 
+    private static boolean exceedsUtf8Limit(String text, long maxBytes) {
+        long encodedBytes = 0;
+        for (int index = 0; index < text.length(); index++) {
+            char current = text.charAt(index);
+            if (current <= 0x7F) {
+                encodedBytes++;
+            } else if (current <= 0x7FF) {
+                encodedBytes += 2;
+            } else if (Character.isHighSurrogate(current) && index + 1 < text.length() && Character.isLowSurrogate(text.charAt(index + 1))) {
+                encodedBytes += 4;
+                index++;
+            } else {
+                encodedBytes += 3;
+            }
+
+            if (encodedBytes > maxBytes) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private LanguageCtx createLanguageCtx(WsLanguageFO fo) {
         DsLevels levels = this.dmDsConfigService.parseLevels(fo.getLevels());
         DmDsDO dsDO = levels.dsDO();
@@ -148,12 +177,17 @@ public class ConsoleLanguageService implements UnifiedPostConstruct, ConsoleLang
         });
 
         DataSourceConfig dsConfig = this.dmDsConfigService.fetchDsConfigFromExists(dsDO.getId());
-        SqlEngineSpi sqlEngine = PluginManager.findParserSpi(dsConfig.getDataSourceType(), dsConfig.getSqlEngine());
+        SqlEngineSpi sqlEngine;
+        try {
+            sqlEngine = this.dmDsConfigService.fetchSqlEngineSpi(dsDO.getId());
+        } catch (RuntimeException e) {
+            sqlEngine = null;
+        }
 
         return new LanguageCtx(levels, dsConfig, ctxDTO, params, sqlEngine);
     }
 
-    private static AbstractRequest parseRequest(WsLanguageFO fo, LanguageCtx ctx, JSONObject json) {
+    private AbstractRequest parseRequest(WsLanguageFO fo, LanguageCtx ctx, JSONObject json) {
         WsLanguageType languageType = fo.getLanguageType();
         if (languageType == null) {
             throw new UnsupportedOperationException("Language WsType is empty.");
@@ -173,6 +207,7 @@ public class ConsoleLanguageService implements UnifiedPostConstruct, ConsoleLang
         if (ctx.getCtxDTO() != null) {
             request.setCatalog(ctx.getCtxDTO().getRdbCatalog());
             request.setSchema(ctx.getCtxDTO().getRdbSchema());
+            request.setSqlParameters(ctx.getCtxDTO().getSqlParameters());
         }
 
         request.setSqlEngine(ctx.getSqlEngine());

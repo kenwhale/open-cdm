@@ -27,11 +27,8 @@ import com.clougence.clouddm.console.web.component.dsconfig.mode.DsConfig;
 import com.clougence.clouddm.console.web.component.dsconfig.mode.DsLevels;
 import com.clougence.clouddm.platform.dal.access.ObjectCacheDao;
 import com.clougence.clouddm.platform.dal.access.entry.DsCacheEntry;
-import com.clougence.clouddm.platform.dal.access.entry.EnvCacheEntry;
-import com.clougence.clouddm.platform.dal.access.entry.UserCacheEntry;
 import com.clougence.clouddm.platform.dal.model.datasource.DmDsDO;
 import com.clougence.clouddm.platform.plugin.PluginManager;
-import com.clougence.clouddm.sdk.execute.ExecuteVariables;
 import com.clougence.clouddm.sdk.execute.session.QueryRequest;
 import com.clougence.clouddm.sdk.execute.session.ResultLimit;
 import com.clougence.clouddm.sdk.execute.session.SessionContextDTO;
@@ -99,6 +96,72 @@ public class DmDsUtils {
         return new DsLevels(String.valueOf(dsDO.getDsEnvId()), dsDO, levels, dbLevels, curLevelsDef, curLevelsParam);
     }
 
+    public static String currentResourcePath(Map<UmiTypes, Object> levels) {
+        return levelsPath(levels, List.of(UmiTypes.Instance, UmiTypes.Catalog, UmiTypes.Schema));
+    }
+
+    public static String instanceResourcePath(Map<UmiTypes, Object> levels) {
+        return levelsPath(levels, List.of(UmiTypes.Instance));
+    }
+
+    public static String normalizeResourcePath(String path) {
+        return normalizeResourcePath(path, true);
+    }
+
+    public static String normalizeResourcePath(String path, boolean trailingSlash) {
+        if (StringUtils.isBlank(path) || "/".equals(path)) {
+            return "/";
+        }
+        String normalized = path.trim();
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        if (normalized.isEmpty()) {
+            return "/";
+        }
+        return "/" + normalized + (trailingSlash ? "/" : "");
+    }
+
+    public static String buildResourcePath(Collection<?> nodes) {
+        return buildResourcePath(nodes, true);
+    }
+
+    public static String buildResourcePath(Collection<?> nodes, boolean trailingSlash) {
+        if (CollectionUtils.isEmpty(nodes)) {
+            return "/";
+        }
+        String path = nodes.stream().map(StringUtils::toString).filter(StringUtils::isNotBlank).collect(java.util.stream.Collectors.joining("/"));
+        return normalizeResourcePath(path, trailingSlash);
+    }
+
+    public static String parentResourcePath(String path) {
+        String normalized = normalizeResourcePath(path, false);
+        int index = normalized.lastIndexOf('/');
+        return index <= 0 ? "/" : normalizeResourcePath(normalized.substring(0, index));
+    }
+
+    private static String levelsPath(Map<UmiTypes, Object> levels, List<UmiTypes> types) {
+        if (levels == null || levels.isEmpty()) {
+            return "/";
+        }
+        List<String> nodes = new ArrayList<>();
+        for (UmiTypes type : types) {
+            Object value = levels.get(type);
+            if (value == null) {
+                continue;
+            }
+            for (String node : StringUtils.toString(value).split("/")) {
+                if (StringUtils.isNotBlank(node)) {
+                    nodes.add(node);
+                }
+            }
+        }
+        return buildResourcePath(nodes);
+    }
+
     public static SessionContextDTO createSessionCtx(DataSourceConfig dsConfig, Map<UmiTypes, Object> levelsParam) {
         Map<String, Object> params = new HashMap<>();
         params.put(SessionSpi.PARAMS_DEFAULT_DB, StringUtils.toString(levelsParam.get(UmiTypes.Catalog)));
@@ -113,19 +176,14 @@ public class DmDsUtils {
         return spi.createSessionContext(dsConfig, params);
     }
 
-    public static QueryRequest createRequestCtx(DataSourceConfig dsConfig, Map<UmiTypes, Object> levelsParam, SessionContextDTO sessionCtx, String uid, String clientIp,
-                                                boolean formConsole) {
-        Map<String, Object> params = new HashMap<>();
-        params.put(SessionSpi.PARAMS_DEFAULT_DB, StringUtils.toString(levelsParam.get(UmiTypes.Catalog)));
-        params.put(SessionSpi.PARAMS_DEFAULT_SCHEMA, StringUtils.toString(levelsParam.get(UmiTypes.Schema)));
-
+    public static QueryRequest createRequestCtx(DataSourceConfig dsConfig) {
         SessionSpi spi = DS_SESSION_SPI_CACHE.get(dsConfig.getDataSourceType());
         if (spi == null) {
             spi = PluginManager.findSessionSpi(dsConfig.getDataSourceType());
             DS_SESSION_SPI_CACHE.put(dsConfig.getDataSourceType(), spi);
         }
 
-        return spi.createQueryRequest(sessionCtx, dsConfig, params, uid, clientIp, formConsole);
+        return spi.createQueryRequest(dsConfig);
     }
 
     public static ResultLimit fetchResultLimit(Map<String, String> configMap, Requester requester) {
@@ -148,14 +206,12 @@ public class DmDsUtils {
         return limit;
     }
 
-    public static void fillRequestVariables(List<QueryRequest> queryList, long dsId, String curUser) {
+    public static void fillRequestConfig(List<QueryRequest> queryList, long dsId) {
         if (CollectionUtils.isEmpty(queryList)) {
             return;
         }
 
-        UserCacheEntry userCache = ownerCacheService.queryByUid(curUser);
         DsCacheEntry dsCache = ownerCacheService.queryByDsId(dsId);
-        EnvCacheEntry envCache = ownerCacheService.queryByEnvId(dsCache.getEnvId());
         Map<String, String> configMap = consoleService.fetchSettingsMap(Arrays.asList(//
                 RootUserConfig.Fields.defaultColumnDisplayChars, //
                 RootUserConfig.Fields.onlineMaxRecordCount,      //
@@ -165,17 +221,7 @@ public class DmDsUtils {
         );
 
         queryList.forEach(query -> {
-            if (query.getVariables() == null) {
-                query.setVariables(new HashMap<>());
-            }
-
-            query.getVariables().put(ExecuteVariables.DS_ID, String.valueOf(dsCache.getDsNumId()));
-            query.getVariables().put(ExecuteVariables.DS_NAME, dsCache.getDsInstId());
-            query.getVariables().put(ExecuteVariables.ENV_ID, String.valueOf(envCache.getEnvNumId()));
-            query.getVariables().put(ExecuteVariables.ENV_NAME, envCache.getEnvName());
-            query.getVariables().put(ExecuteVariables.USER_NAME, userCache.getUserName());
-            query.getVariables().put(ExecuteVariables.ROLE_NAME, userCache.getRoleName());
-
+            query.setDsId(dsCache.getDsNumId());
             ResultLimit limit = fetchResultLimit(configMap, query.getRequester());
             query.getResultConf().setQueryTimeoutSec(limit.getQueryTimeoutSec());
             query.getResultConf().setFetchRecordCountLimit(limit.getFetchRecordCountLimit());

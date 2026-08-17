@@ -47,9 +47,9 @@ import com.clougence.clouddm.sdk.execute.session.MessageLevel;
 import com.clougence.clouddm.sdk.execute.session.QueryRequest;
 import com.clougence.clouddm.sdk.execute.session.SessionContextDTO;
 import com.clougence.clouddm.sdk.security.auth.AuthKind;
-import com.clougence.clouddm.sdk.security.auth.SecQueryType;
 import com.clougence.clouddm.sdk.security.auth.def.SecDataAuthLabel;
 import com.clougence.clouddm.sdk.service.secrules.Requester;
+import com.clougence.clouddm.sdk.sql.parser.SplitQueryType;
 import com.clougence.clouddm.sdk.ui.editor.data.DataEditorSpi;
 import com.clougence.clouddm.sdk.ui.editor.data.DataEditorSqlType;
 import com.clougence.clouddm.sdk.ui.editor.data.DataEditorUiStyle;
@@ -102,7 +102,7 @@ public class DsDataEditorServiceImpl implements DsDataEditorService {
             if (selectFO.getOffset() < 0) {
 
                 String countSql = selectCount(dsDO, catalog, schema, table, targetType, selectFO.getCondition());
-                EditorResultSet result = doFetchCount(sessionId, uid, clientIp, levels, dsConfig, sessionCtx, countSql, table);
+                EditorResultSet result = doFetchCount(sessionId, uid, dsConfig, countSql, table);
                 if (!result.isSuccess()) {
                     throw new ErrorMessageException(result.getMessage());
                 }
@@ -170,7 +170,7 @@ public class DsDataEditorServiceImpl implements DsDataEditorService {
             String countSql = selectCount(dsDO, catalog, schema, table, targetType, selectFO.getCondition());
 
             // fetch count
-            EditorResultSet result = doFetchCount(sessionId, uid, clientIp, levels, dsConfig, sessionCtx, countSql, table);
+            EditorResultSet result = doFetchCount(sessionId, uid, dsConfig, countSql, table);
 
             // result
             if (result.isSuccess()) {
@@ -276,17 +276,14 @@ public class DsDataEditorServiceImpl implements DsDataEditorService {
     // Utils Method
     //
 
-    private EditorResultSet doFetchCount(String sessionId, String uid, String clientIp, DsLevels levels, DataSourceConfig dsConfig, SessionContextDTO sessionCtx, String countSql,
-                                         String table) {
-        Map<UmiTypes, Object> levelsParam = levels.levelsParam();
+    private EditorResultSet doFetchCount(String sessionId, String uid, DataSourceConfig dsConfig, String countSql, String table) {
 
         // create session/request
-        QueryRequest request = DmDsUtils.createRequestCtx(dsConfig, levelsParam, sessionCtx, uid, clientIp, true);
+        QueryRequest request = DmDsUtils.createRequestCtx(dsConfig);
         request.setQueryBody(countSql);
         request.setQueryArgs(Collections.emptyList());
-        request.setQueryType(SecQueryType.SELECT);
+        request.setQueryTypes(Set.of(SplitQueryType.SELECT));
         request.setRequester(Requester.CONSOLE);
-        request.setResource(Collections.singletonList(DmConvertUtils.convertToResource(levels, table)));
 
         // execute sql
         try {
@@ -323,12 +320,11 @@ public class DsDataEditorServiceImpl implements DsDataEditorService {
         Map<UmiTypes, Object> levelsParam = levels.levelsParam();
 
         // create session/request
-        QueryRequest request = DmDsUtils.createRequestCtx(dsConfig, levelsParam, sessionCtx, uid, clientIp, true);
+        QueryRequest request = DmDsUtils.createRequestCtx(dsConfig);
         request.setQueryBody(fetchSql);
         request.setQueryArgs(Collections.emptyList());
-        request.setQueryType(SecQueryType.SELECT);
+        request.setQueryTypes(Set.of(SplitQueryType.SELECT));
         request.setRequester(Requester.CONSOLE);
-        request.setResource(Collections.singletonList(DmConvertUtils.convertToResource(levels, table)));
         request.setUsingValueProcess(!this.authCheckService
             .checkResPathWithoutError(puid, uid, levels.dsDO().getId(), AuthKind.DataSource, levels.asResPath(), SecDataAuthLabel.DM_DAUTH_SENSITIVE));
 
@@ -368,12 +364,11 @@ public class DsDataEditorServiceImpl implements DsDataEditorService {
         DmDsDO dsDO = levels.dsDO();
 
         // create session/request
-        QueryRequest request = DmDsUtils.createRequestCtx(dsConfig, levelsParam, sessionCtx, uid, clientIp, true);
+        QueryRequest request = DmDsUtils.createRequestCtx(dsConfig);
         request.setQueryBody(dmlChange.getSql());
         request.setQueryArgs(Collections.emptyList());
-        request.setQueryType(DmConvertUtils.convertToSecQueryType(dmlChange.getSqlType()));
+        request.setQueryTypes(Set.of(DmConvertUtils.convertToSecQueryType(dmlChange.getSqlType())));
         request.setRequester(Requester.CONSOLE);
-        request.setResource(Collections.singletonList(DmConvertUtils.convertToResource(levels, tableMeta.getName())));
 
         // ReloadSpi  request
         DataEditorReloadSpi extSpi = PluginManager.findDataEditorExtSpi(dsDO.getDataSourceType());

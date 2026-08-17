@@ -16,6 +16,7 @@
 package com.clougence.clouddm.init.component.fixtasks;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -32,6 +33,7 @@ import com.clougence.clouddm.platform.dal.model.secrule.*;
 import com.clougence.clouddm.platform.plugin.PluginManager;
 import com.clougence.clouddm.sdk.service.secrules.SecParam;
 import com.clougence.detectrule.domain.ParamInfo;
+import com.clougence.detectrule.parser.DetectRuleDslProvider;
 import com.clougence.detectrule.parser.DetectRuleHelper;
 import com.clougence.detectrule.parser.ast.statement.StatementList;
 import com.clougence.dslpaser.antlr.DslHelper;
@@ -232,8 +234,8 @@ public class DmFixSecRules {
     }
 
     private List<SecParam> fallbackExtractParameters(SecRuleScriptInfo info) {
-        try {
-            StatementSet statementSet = DslHelper.parserDsl("DetectRule", info.getContent());
+        try (StringReader reader = new StringReader(info.getContent())) {
+            StatementSet statementSet = DslHelper.parserDsl(DetectRuleDslProvider.INSTANCE, reader);
             List<ParamInfo> paramInfos = DetectRuleHelper.extractParameters((StatementList) statementSet);
             List<SecParam> fallbackParams = new ArrayList<>(paramInfos.size());
             for (int i = 0; i < paramInfos.size(); i++) {
