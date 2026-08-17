@@ -274,9 +274,9 @@
         primary_uid = #{puid}
         and deleted = false
         and raw_sql is not null
+        and ticket_status = 'FINISHED'
         <if test="ticketQuery.startTime != null"><![CDATA[ AND gmt_create > #{ticketQuery.startTime} ]]></if>
         <if test="ticketQuery.endTime != null"><![CDATA[ AND gmt_create < #{ticketQuery.endTime} ]]></if>
-        <if test="ticketQuery.ticketStatus != null"><![CDATA[ AND ticket_status =#{ticketQuery.ticketStatus,javaType=com.clougence.clouddm.platform.dal.model.approval.ApprovalStatus} ]]></if>
         <if test="ticketQuery.dsIds != null and ticketQuery.dsIds.size() >0"> AND bind_ds_id in <foreach collection="ticketQuery.dsIds" item="item" separator="," open="(" close=")">#{item}</foreach></if>
         <if test="ticketQuery.ticketId != null"><![CDATA[ AND id = #{ticketQuery.ticketId} ]]></if>
         </where>
