@@ -39,6 +39,12 @@ public class DmTicketExportRow {
     /** 绑定的数据源 ID */
     private Long   bindDsId;
 
+    /** 库层级路径 JSON（dm_approval.levels，如 ["schema"] 或 ["catalog","schema"]），库名取最后一个元素 */
+    private String levels;
+
+    /** 目标资源路径（dm_approval.target_info，如 /实例ID/库名），库名取最后一个 / 之后 */
+    private String targetInfo;
+
     /** 创建时间 */
     private Date   gmtCreate;
 

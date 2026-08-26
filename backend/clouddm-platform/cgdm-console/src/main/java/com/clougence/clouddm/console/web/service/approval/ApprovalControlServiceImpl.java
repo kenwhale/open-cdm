@@ -188,6 +188,7 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
         ArgApprovalQueryObj queryParams = ArgApprovalQueryObj.builder()
             .ticketStatus(fo.getTicketStatus())
             .dsIds(fo.getDsIds())
+            .schemaNames(fo.getSchemaNames())
             .startTime(getDateTimeOfTimestamp(fo.getStartTimeMs()))
             .endTime(getDateTimeOfTimestamp(fo.getEndTimeMs()))
             .build();
@@ -195,33 +196,47 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
         if (rows == null || rows.isEmpty()) {
             return new ArrayList<>();
         }
-        // 按数据源分组，合并状态分布
-        Map<Long, List<DmTicketStatRow>> grouped = rows.stream()
-            .filter(r -> r.getBindDsId() != null)
-            .collect(Collectors.groupingBy(DmTicketStatRow::getBindDsId));
-        List<DmTicketStatDsVO> result = new ArrayList<>();
-        for (Map.Entry<Long, List<DmTicketStatRow>> e : grouped.entrySet()) {
-            DmTicketStatDsVO vo = new DmTicketStatDsVO();
-            vo.setDsId(e.getKey());
-            long total = 0;
-            Map<String, Long> statusCount = new HashMap<>();
-            for (DmTicketStatRow r : e.getValue()) {
-                total += r.getCnt();
-                statusCount.merge(r.getStatus(), r.getCnt(), Long::sum);
+        List<String> schemaFilter = fo.getSchemaNames();
+        // 按 数据源 + 库 分组，合并状态分布
+        Map<String, DmTicketStatDsVO> bySchema = new LinkedHashMap<>();
+        Set<Long> dsIds = new HashSet<>();
+        for (DmTicketStatRow r : rows) {
+            if (r.getBindDsId() == null) {
+                continue;
             }
-            vo.setTotalCount(total);
-            vo.setStatusCount(statusCount);
-            result.add(vo);
+            String rawSchema = extractSchemaName(r.getLevels(), r.getTargetInfo());
+            if (schemaFilter != null && !schemaFilter.isEmpty() && (rawSchema == null || !schemaFilter.contains(rawSchema))) {
+                continue;
+            }
+            final String schemaName = rawSchema == null ? "-" : rawSchema;
+            dsIds.add(r.getBindDsId());
+            String key = r.getBindDsId() + "|" + schemaName;
+            DmTicketStatDsVO vo = bySchema.computeIfAbsent(key, k -> {
+                DmTicketStatDsVO v = new DmTicketStatDsVO();
+                v.setDsId(r.getBindDsId());
+                v.setSchemaName(schemaName);
+                v.setStatusCount(new HashMap<>());
+                return v;
+            });
+            vo.setTotalCount((vo.getTotalCount() == null ? 0L : vo.getTotalCount()) + 1L);
+            vo.getStatusCount().merge(r.getStatus(), 1L, Long::sum);
         }
+        List<DmTicketStatDsVO> result = new ArrayList<>(bySchema.values());
         // 解析数据源名称与环境
-        Map<Long, DmDsDO> dsMap = resolveDsNameMap(grouped.keySet());
+        Map<Long, DmDsDO> dsMap = resolveDsNameMap(dsIds);
         for (DmTicketStatDsVO vo : result) {
             DmDsDO ds = dsMap.get(vo.getDsId());
             if (ds != null) {
                 vo.setDsName(ds.getInstanceDesc());
                 vo.setEnvName(ds.getDsEnvDO() != null ? ds.getDsEnvDO().getEnvName() : null);
             }
+            if (vo.getDsName() == null) {
+                vo.setDsName(String.valueOf(vo.getDsId()));
+            }
         }
+        // 稳定排序：数据源 + 库
+        result.sort(Comparator.comparing(DmTicketStatDsVO::getDsName, Comparator.nullsLast(String::compareTo))
+            .thenComparing(DmTicketStatDsVO::getSchemaName, Comparator.nullsLast(String::compareTo)));
         return result;
     }
 
@@ -230,6 +245,7 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
         ArgApprovalQueryObj queryParams = ArgApprovalQueryObj.builder()
             .ticketStatus(fo.getTicketStatus())
             .dsIds(fo.getDsIds())
+            .schemaNames(fo.getSchemaNames())
             .ticketId(fo.getTicketId())
             .startTime(getDateTimeOfTimestamp(fo.getStartTimeMs()))
             .endTime(getDateTimeOfTimestamp(fo.getEndTimeMs()))
@@ -237,6 +253,16 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
         List<DmTicketExportRow> rows = this.approvalDal.approvalMapper().listTicketExportRows(puid, queryParams);
         if (rows == null || rows.isEmpty()) {
             return null;
+        }
+        // 按库过滤（前端已级联到库，这里再做一次兜底过滤）
+        List<String> schemaFilter = fo.getSchemaNames();
+        if (schemaFilter != null && !schemaFilter.isEmpty()) {
+            rows = rows.stream()
+                .filter(r -> schemaFilter.contains(extractSchemaName(r.getLevels(), r.getTargetInfo())))
+                .collect(Collectors.toList());
+            if (rows.isEmpty()) {
+                return null;
+            }
         }
         Map<Long, DmDsDO> dsMap = resolveDsNameMap(rows.stream().map(DmTicketExportRow::getBindDsId).filter(Objects::nonNull).collect(Collectors.toSet()));
         StringBuilder sb = new StringBuilder();
@@ -248,11 +274,15 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
         for (DmTicketExportRow r : rows) {
             DmDsDO ds = r.getBindDsId() == null ? null : dsMap.get(r.getBindDsId());
             String dsDesc = ds == null ? String.valueOf(r.getBindDsId()) : ds.getInstanceDesc();
+            String schemaName = extractSchemaName(r.getLevels(), r.getTargetInfo());
             sb.append("-- ------------------------------------------------------------------\n");
             sb.append("-- 工单 #").append(r.getId())
               .append(" | 标题: ").append(r.getTicketTitle())
-              .append(" | 数据源: ").append(dsDesc)
-              .append(" | 状态: ").append(r.getStatus())
+              .append(" | 数据源: ").append(dsDesc);
+            if (StringUtils.isNotEmpty(schemaName)) {
+                sb.append(" | 库: ").append(schemaName);
+            }
+            sb.append(" | 状态: ").append(r.getStatus())
               .append(" | 创建时间: ").append(r.getGmtCreate() == null ? "" : DateFormatType.s_yyyyMMdd_HHmmss.format(r.getGmtCreate()))
               .append('\n');
             sb.append("-- ------------------------------------------------------------------\n");
@@ -266,6 +296,31 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
             sb.append('\n');
         }
         return sb.toString();
+    }
+
+    /**
+     * 从工单提取库名：优先 levels（JSON 数组，最后一个元素为库名），
+     * 兜底 target_info（形如 /实例ID/库名 或 /实例ID/catalog/库名，最后一个 / 之后为库名）。
+     */
+    private String extractSchemaName(String levelsJson, String targetInfo) {
+        if (StringUtils.isNotEmpty(levelsJson)) {
+            try {
+                List<String> levels = JsonUtils.toList(levelsJson, new TypeReference<List<String>>() {});
+                if (levels != null && !levels.isEmpty()) {
+                    return levels.get(levels.size() - 1);
+                }
+            } catch (Exception e) {
+                log.warn("Parse ticket levels failed: {}", levelsJson, e);
+            }
+        }
+        if (StringUtils.isNotEmpty(targetInfo)) {
+            int idx = targetInfo.lastIndexOf('/');
+            String schema = idx >= 0 ? targetInfo.substring(idx + 1) : targetInfo;
+            if (StringUtils.isNotEmpty(schema)) {
+                return schema;
+            }
+        }
+        return null;
     }
 
     /**
@@ -306,6 +361,7 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
             .startTime(getDateTimeOfTimestamp(fo.getStartTimeMs()))
             .endTime(getDateTimeOfTimestamp(fo.getEndTimeMs()))
             .dsIds(fo.getDsIds())
+            .schemaNames(fo.getSchemaNames())
             .build();
         return this.approvalDal.approvalMapper().listTicketByConditionAndPage(page, queryParams, puid);
     }
@@ -320,6 +376,7 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
             .startTime(getDateTimeOfTimestamp(fo.getStartTimeMs()))
             .endTime(getDateTimeOfTimestamp(fo.getEndTimeMs()))
             .dsIds(fo.getDsIds())
+            .schemaNames(fo.getSchemaNames())
             .approvalPersonUid(fo.getUid())
             .build();
         return this.approvalDal.approvalMapper().listConfirmTicketByConditionAndPage(page, queryParams);
@@ -335,6 +392,7 @@ public class ApprovalControlServiceImpl implements ApprovalControlService {
             .startTime(getDateTimeOfTimestamp(fo.getStartTimeMs()))
             .endTime(getDateTimeOfTimestamp(fo.getEndTimeMs()))
             .dsIds(fo.getDsIds())
+            .schemaNames(fo.getSchemaNames())
             .build();
 
         return this.approvalDal.approvalMapper().listTicketByConditionAndPage(page, queryParams, puid);

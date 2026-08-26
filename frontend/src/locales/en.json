@@ -2026,6 +2026,8 @@
   "xiu-gai-shi-li-bei-zhu": "Modify instance remarks",
   "xuan-ze-chan-pin-ji-qun": "Select product cluster",
   "xuan-ze-shu-ju-yuan": "Select data source",
+  "xuan-ze-ku": "Select Schema",
+  "xuan-ze-catalog": "Select Catalog",
   "zhang-hu-zhong-xin": "Account Center",
   "zhong-ming-ming": "Rename",
   "zhong-ming-ming-thiscurrenttabpoptiptabletitle-wei": "Rename {0}.`{1}` to",

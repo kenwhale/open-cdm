@@ -20,7 +20,8 @@ import lombok.Setter;
 
 /**
  * 工单按数据源(数据库)汇总的统计行。
- * 由 DmApprovalMapper.statTicketByDs 返回，一条 = 某个数据源下某状态的工单数。
+ * 由 DmApprovalMapper.statTicketByDs 返回，一条 = 一张工单（绑定数据源 + 状态 + 库信息）。
+ * 汇总（按数据源/库分组、统计数量）在服务层完成。
  *
  * @author zhangfan
  */
@@ -34,7 +35,10 @@ public class DmTicketStatRow {
     /** 工单状态（dm_approval.ticket_status） */
     private String status;
 
-    /** 数量 */
-    private Long   cnt;
+    /** 库层级路径 JSON（dm_approval.levels，如 ["schema"] 或 ["catalog","schema"]），库名取最后一个元素 */
+    private String levels;
+
+    /** 目标资源路径（dm_approval.target_info，如 /实例ID/库名），库名取最后一个 / 之后 */
+    private String targetInfo;
 
 }

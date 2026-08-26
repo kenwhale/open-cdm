@@ -47,5 +47,7 @@ public class ArgApprovalQueryObj {
 
     private List<Long>      dsIds;
 
+    private List<String>    schemaNames;
+
     private String          approvalPersonUid;
 }

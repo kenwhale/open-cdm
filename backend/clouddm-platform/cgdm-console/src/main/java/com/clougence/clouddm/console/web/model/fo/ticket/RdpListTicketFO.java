@@ -47,6 +47,9 @@ public class RdpListTicketFO {
     /** 按数据源(数据库)过滤，空则不限制 */
     private List<Long>       dsIds;
 
+    /** 按库(schema)过滤，空则不限制 */
+    private List<String>     schemaNames;
+
     private PageObj           page;
 
     @JsonIgnore

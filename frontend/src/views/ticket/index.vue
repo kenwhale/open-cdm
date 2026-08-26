@@ -20,14 +20,39 @@
               </Select>
               <Input :placeholder="ticketQueryPlaceholder" v-model="searchKey.queryValue" style="width: 280px; margin-right: 4px" clearable />
               <Select
-                style="width: 220px; margin-right: 4px"
-                v-model="searchKey.dsIds"
-                multiple
+                style="width: 200px; margin-right: 4px"
+                v-model="searchKey.dsId"
                 clearable
                 :placeholder="$t('an-shu-ju-yuan-shai-xuan')"
+                @on-change="handleDsChange"
               >
                 <Option v-for="ds in dsList" :key="ds.objId" :value="Number(ds.objId)">
                   {{ ds.objName }}
+                </Option>
+              </Select>
+              <Select
+                v-if="searchKey.dsHasCatalog"
+                style="width: 160px; margin-right: 4px"
+                v-model="searchKey.catalog"
+                clearable
+                :placeholder="$t('xuan-ze-catalog')"
+                @on-change="handleCatalogChange"
+              >
+                <Option v-for="c in searchKey.catalogList" :key="c.objName" :value="c.objName">
+                  {{ c.objName }}
+                </Option>
+              </Select>
+              <Select
+                style="width: 220px; margin-right: 4px"
+                v-model="searchKey.schemaNames"
+                multiple
+                clearable
+                :disabled="schemaSelectDisabled"
+                :loading="searchKey.schemaLoading"
+                :placeholder="$t('xuan-ze-ku')"
+              >
+                <Option v-for="s in searchKey.schemaList" :key="s.objName" :value="s.objName">
+                  {{ s.objName }}
                 </Option>
               </Select>
               <Button type="primary" ghost class="ticket-search-btn" @click="listTickets">
@@ -177,7 +202,13 @@ export default {
         queryType: 'BIZ_ID',
         queryValue: '',
         type: '',
-        dsIds: []
+        dsId: null,
+        schemaNames: [],
+        schemaList: [],
+        schemaLoading: false,
+        catalog: '',
+        catalogList: [],
+        dsHasCatalog: false
       },
       ticketColumns: [
         {
@@ -234,7 +265,8 @@ export default {
       statData: [],
       statLoading: false,
       statColumns: [
-        { title: this.$t('shu-ju-ku'), key: 'dsName', minWidth: 160 },
+        { title: this.$t('shu-ju-yuan'), key: 'dsName', minWidth: 160 },
+        { title: this.$t('schema'), key: 'schemaName', minWidth: 140 },
         { title: this.$t('huan-jing-0'), key: 'envName', width: 120 },
         { title: this.$t('gong-dan-zong-shu'), key: 'totalCount', width: 100, align: 'center' },
         { title: this.$t('zhuang-tai-fen-bu'), slot: 'statusCount', minWidth: 280 }
@@ -260,6 +292,12 @@ export default {
     },
     isRootAccount() {
       return this.userInfo.accountType === 'PRIMARY_ACCOUNT';
+    },
+    schemaSelectDisabled() {
+      const dsId = this.normalizeDsId(this.searchKey.dsId);
+      if (!dsId) return true;
+      if (this.searchKey.dsHasCatalog && !this.searchKey.catalog) return true;
+      return false;
     },
     rootAccountUnsupportedTip() {
       return '管理员账号不支持此操作';
@@ -324,6 +362,7 @@ export default {
       } else {
         ticketTitleName = queryValue || null;
       }
+      const dsFilter = this.buildQueryDsAndSchema();
       const res = await this.$services.rdpTicketListBasic({
         data: {
           ticketId: null,
@@ -333,7 +372,8 @@ export default {
           ticketBizId,
           ticketTitleName,
           ticketListType: this.ticketListType,
-          dsIds: this.searchKey.dsIds && this.searchKey.dsIds.length ? this.searchKey.dsIds : null,
+          dsIds: dsFilter.dsIds,
+          schemaNames: dsFilter.schemaNames,
           page: {
             pageSize: this.pageSize,
             pageNum: this.pageNum
@@ -350,11 +390,76 @@ export default {
       try {
         const res = await this.$services.dmTicketListDsInsLevels();
         if (res.success) {
-          this.dsList = res.data || [];
+          this.dsList = (res.data || []).map((ds) => ({
+            ...ds,
+            levels: [ds.objAttr.dsEnvId, ds.objId]
+          }));
         }
       } catch (error) {
         console.error('获取数据源列表失败:', error);
       }
+    },
+    normalizeDsId(val) {
+      if (val === null || val === undefined || val === '') {
+        return null;
+      }
+      return Number(val);
+    },
+    handleDsChange() {
+      this.searchKey.schemaNames = [];
+      this.searchKey.schemaList = [];
+      this.searchKey.catalog = '';
+      this.searchKey.catalogList = [];
+      this.searchKey.dsHasCatalog = false;
+      const dsId = this.normalizeDsId(this.searchKey.dsId);
+      if (!dsId) {
+        return;
+      }
+      const ds = this.dsList.find((d) => Number(d.objId) === dsId);
+      if (ds) {
+        this.loadDbLevels(ds.levels);
+      }
+    },
+    handleCatalogChange() {
+      this.searchKey.schemaNames = [];
+      this.searchKey.schemaList = [];
+      if (!this.searchKey.catalog) {
+        return;
+      }
+      const ds = this.dsList.find((d) => Number(d.objId) === this.normalizeDsId(this.searchKey.dsId));
+      if (ds) {
+        this.loadDbLevels([...ds.levels, this.searchKey.catalog]);
+      }
+    },
+    async loadDbLevels(levels) {
+      this.searchKey.schemaLoading = true;
+      try {
+        const res = await this.$services.dmTicketListDbLevels({
+          data: {
+            levels,
+            refreshCache: false
+          }
+        });
+        if (res.success && res.data && res.data.length) {
+          if (res.data[0].objType === 'SCHEMA') {
+            this.searchKey.schemaList = res.data;
+          } else if (res.data[0].objType === 'CATALOG') {
+            this.searchKey.dsHasCatalog = true;
+            this.searchKey.catalogList = res.data;
+          }
+        }
+      } catch (error) {
+        console.error('获取库列表失败:', error);
+      } finally {
+        this.searchKey.schemaLoading = false;
+      }
+    },
+    buildQueryDsAndSchema() {
+      const dsId = this.normalizeDsId(this.searchKey.dsId);
+      return {
+        dsIds: dsId ? [dsId] : null,
+        schemaNames: this.searchKey.schemaNames && this.searchKey.schemaNames.length ? this.searchKey.schemaNames : null
+      };
     },
     handleShowStat() {
       this.showStatModal = true;
@@ -383,6 +488,7 @@ export default {
       } else {
         ticketTitleName = queryValue || null;
       }
+      const dsFilter = this.buildQueryDsAndSchema();
       return {
         ticketId: null,
         userName: '',
@@ -391,7 +497,8 @@ export default {
         ticketBizId,
         ticketTitleName,
         ticketListType: this.ticketListType,
-        dsIds: this.searchKey.dsIds && this.searchKey.dsIds.length ? this.searchKey.dsIds : null
+        dsIds: dsFilter.dsIds,
+        schemaNames: dsFilter.schemaNames
       };
     },
     async handleExportSql() {

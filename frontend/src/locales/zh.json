@@ -2032,6 +2032,8 @@
   "fu-zhi-sql": "复制SQL",
   "zhong-ming-ming-thiscurrenttabpoptiptabletitle-wei": "重命名{0}.`{1}`为",
   "xuan-ze-shu-ju-yuan": "选择数据源",
+  "xuan-ze-ku": "选择库",
+  "xuan-ze-catalog": "选择Catalog",
   "tian-jia-shu-ju-ku-zhang-hao": "添加数据库账号",
   "gong-dan-she-zhi": "工单设置",
   "huan-jing-ce-lue": "查询策略",

@@ -35,6 +35,9 @@ public class DmTicketStatDsVO {
     /** 数据源名称 */
     private String           dsName;
 
+    /** 库(schema)名称；按库汇总时有效，未识别为 "-" */
+    private String           schemaName;
+
     /** 环境名称 */
     private String           envName;
 

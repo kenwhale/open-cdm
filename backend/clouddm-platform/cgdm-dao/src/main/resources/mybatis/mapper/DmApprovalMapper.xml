@@ -179,6 +179,7 @@
         <if test="ticketQuery.ticketTitleName != null"><![CDATA[ AND ticket_title LIKE concat('%',#{ticketQuery.ticketTitleName},'%') ]]></if>
         <if test="ticketQuery.ticketStatus != null"><![CDATA[ AND ticket_status =#{ticketQuery.ticketStatus,javaType=com.clougence.clouddm.platform.dal.model.approval.ApprovalStatus} ]]></if>
         <if test="ticketQuery.dsIds != null and ticketQuery.dsIds.size() >0"> AND bind_ds_id in <foreach collection="ticketQuery.dsIds" item="item" separator="," open="(" close=")">#{item}</foreach></if>
+        <if test="ticketQuery.schemaNames != null and ticketQuery.schemaNames.size() >0"> AND SUBSTRING_INDEX(target_info,'/',-1) in <foreach collection="ticketQuery.schemaNames" item="item" separator="," open="(" close=")">#{item}</foreach></if>
         and primary_uid = #{puid}
         and deleted = false
         </where>
@@ -229,6 +230,7 @@
         <if test="ticketQuery.ticketTitleName != null"><![CDATA[ AND a.ticket_title LIKE concat('%',#{ticketQuery.ticketTitleName},'%') ]]></if>
         <if test="ticketQuery.ticketStatus != null"><![CDATA[ AND a.ticket_status =#{ticketQuery.ticketStatus,javaType=com.clougence.clouddm.platform.dal.model.approval.ApprovalStatus} ]]></if>
         <if test="ticketQuery.dsIds != null and ticketQuery.dsIds.size() >0"> AND a.bind_ds_id in <foreach collection="ticketQuery.dsIds" item="item" separator="," open="(" close=")">#{item}</foreach></if>
+        <if test="ticketQuery.schemaNames != null and ticketQuery.schemaNames.size() >0"> AND SUBSTRING_INDEX(a.target_info,'/',-1) in <foreach collection="ticketQuery.schemaNames" item="item" separator="," open="(" close=")">#{item}</foreach></if>
         <if test="ticketQuery.approvalPersonUid != null"><![CDATA[ AND b.person_uid = #{ticketQuery.approvalPersonUid} ]]></if>
         and a.deleted = false
         and a.ticket_status in ('WAIT_CONFIRM','WAIT_APPROVAL','WAIT_EXEC')
@@ -243,7 +245,8 @@
         select
             bind_ds_id as bindDsId,
             ticket_status as status,
-            count(*) as cnt
+            levels,
+            target_info as targetInfo
         from
         dm_approval
         <where>
@@ -255,8 +258,6 @@
         <if test="ticketQuery.ticketStatus != null"><![CDATA[ AND ticket_status =#{ticketQuery.ticketStatus,javaType=com.clougence.clouddm.platform.dal.model.approval.ApprovalStatus} ]]></if>
         <if test="ticketQuery.dsIds != null and ticketQuery.dsIds.size() >0"> AND bind_ds_id in <foreach collection="ticketQuery.dsIds" item="item" separator="," open="(" close=")">#{item}</foreach></if>
         </where>
-        group by bind_ds_id, ticket_status
-        order by cnt desc
     </select>
 
     <select id="listTicketExportRows" resultType="com.clougence.clouddm.platform.dal.model.approval.DmTicketExportRow">
@@ -266,6 +267,8 @@
             bind_ds_id as bindDsId,
             gmt_create as gmtCreate,
             ticket_status as status,
+            levels,
+            target_info as targetInfo,
             raw_sql as rawSql,
             roll_back_sql as rollBackSql
         from
