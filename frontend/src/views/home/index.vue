@@ -28,7 +28,11 @@
               <div class="app-main-card">
                 <AppContentHeader @check-version="checkVersion(true)" />
                 <div class="app-main-card__body">
-                  <router-view />
+                  <router-view v-slot="{ Component }">
+                    <keep-alive include="Ticket">
+                      <component :is="Component" />
+                    </keep-alive>
+                  </router-view>
                 </div>
               </div>
             </div>

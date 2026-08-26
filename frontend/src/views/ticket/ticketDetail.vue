@@ -22,6 +22,7 @@
             <Button v-if="ticketDetail.canClose" @click="handleShowCloseTicketModal">
               {{ $t('guan-bi') }}
             </Button>
+            <Button @click="$router.back()">{{ $t('fan-hui') }}</Button>
             <Button class="refresh-btn" :loading="loading" @click="getTicketDetail('refresh')">
               <CustomIcon type="icon-v2-Refresh" v-if="!loading" />
             </Button>

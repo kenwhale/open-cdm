@@ -167,7 +167,7 @@ import { hasSchema, RULE_WARN_LEVEL } from '@/utils';
 import { mapState } from 'vuex';
 
 export default {
-  name: 'Ticket',
+  name: 'TicketCreate',
   components: {
     TicketEditor,
     DsSelect,
